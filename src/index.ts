@@ -86,7 +86,7 @@ class FreeAgentServer {
           name: 'list_timeslips',
           description: 'List timeslips with optional filtering',
           inputSchema: {
-            type: 'object',
+            type: 'object' as const,
             properties: {
               from_date: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
               to_date: { type: 'string', description: 'End date (YYYY-MM-DD)' },
@@ -107,7 +107,7 @@ class FreeAgentServer {
           name: 'get_timeslip',
           description: 'Get a single timeslip by ID',
           inputSchema: {
-            type: 'object',
+            type: 'object' as const,
             properties: {
               id: { type: 'string', description: 'Timeslip ID' }
             },
@@ -118,7 +118,7 @@ class FreeAgentServer {
           name: 'create_timeslip',
           description: 'Create a new timeslip',
           inputSchema: {
-            type: 'object',
+            type: 'object' as const,
             properties: {
               task: { type: 'string', description: 'Task URL' },
               user: { type: 'string', description: 'User URL' },
@@ -134,7 +134,7 @@ class FreeAgentServer {
           name: 'update_timeslip',
           description: 'Update an existing timeslip',
           inputSchema: {
-            type: 'object',
+            type: 'object' as const,
             properties: {
               id: { type: 'string', description: 'Timeslip ID' },
               task: { type: 'string', description: 'Task URL' },
@@ -151,7 +151,7 @@ class FreeAgentServer {
           name: 'delete_timeslip',
           description: 'Delete a timeslip',
           inputSchema: {
-            type: 'object',
+            type: 'object' as const,
             properties: {
               id: { type: 'string', description: 'Timeslip ID' }
             },
@@ -162,7 +162,7 @@ class FreeAgentServer {
           name: 'start_timer',
           description: 'Start a timer for a timeslip',
           inputSchema: {
-            type: 'object',
+            type: 'object' as const,
             properties: {
               id: { type: 'string', description: 'Timeslip ID' }
             },
@@ -173,7 +173,7 @@ class FreeAgentServer {
           name: 'stop_timer',
           description: 'Stop a running timer for a timeslip',
           inputSchema: {
-            type: 'object',
+            type: 'object' as const,
             properties: {
               id: { type: 'string', description: 'Timeslip ID' }
             },
@@ -191,7 +191,7 @@ class FreeAgentServer {
           case 'list_timeslips': {
             const timeslips = await this.client.listTimeslips(request.params.arguments);
             return {
-              content: [{ type: 'text', text: JSON.stringify(timeslips, null, 2) }]
+              content: [{ type: 'text' as const, text: JSON.stringify(timeslips, null, 2) }]
             };
           }
 
@@ -199,7 +199,7 @@ class FreeAgentServer {
             const { id } = request.params.arguments as { id: string };
             const timeslip = await this.client.getTimeslip(id);
             return {
-              content: [{ type: 'text', text: JSON.stringify(timeslip, null, 2) }]
+              content: [{ type: 'text' as const, text: JSON.stringify(timeslip, null, 2) }]
             };
           }
 
@@ -207,7 +207,7 @@ class FreeAgentServer {
             const attributes = validateTimeslipAttributes(request.params.arguments);
             const timeslip = await this.client.createTimeslip(attributes);
             return {
-              content: [{ type: 'text', text: JSON.stringify(timeslip, null, 2) }]
+              content: [{ type: 'text' as const, text: JSON.stringify(timeslip, null, 2) }]
             };
           }
 
@@ -224,7 +224,7 @@ class FreeAgentServer {
 
             const timeslip = await this.client.updateTimeslip(id, validUpdates);
             return {
-              content: [{ type: 'text', text: JSON.stringify(timeslip, null, 2) }]
+              content: [{ type: 'text' as const, text: JSON.stringify(timeslip, null, 2) }]
             };
           }
 
@@ -232,7 +232,7 @@ class FreeAgentServer {
             const { id } = request.params.arguments as { id: string };
             await this.client.deleteTimeslip(id);
             return {
-              content: [{ type: 'text', text: 'Timeslip deleted successfully' }]
+              content: [{ type: 'text' as const, text: 'Timeslip deleted successfully' }]
             };
           }
 
@@ -240,7 +240,7 @@ class FreeAgentServer {
             const { id } = request.params.arguments as { id: string };
             const timeslip = await this.client.startTimer(id);
             return {
-              content: [{ type: 'text', text: JSON.stringify(timeslip, null, 2) }]
+              content: [{ type: 'text' as const, text: JSON.stringify(timeslip, null, 2) }]
             };
           }
 
@@ -248,7 +248,7 @@ class FreeAgentServer {
             const { id } = request.params.arguments as { id: string };
             const timeslip = await this.client.stopTimer(id);
             return {
-              content: [{ type: 'text', text: JSON.stringify(timeslip, null, 2) }]
+              content: [{ type: 'text' as const, text: JSON.stringify(timeslip, null, 2) }]
             };
           }
 
@@ -261,7 +261,7 @@ class FreeAgentServer {
       } catch (error: any) {
         console.error(`[Error] Tool ${request.params.name} failed:`, error);
         return {
-          content: [{ type: 'text', text: `Error: ${error.message}` }],
+          content: [{ type: 'text' as const, text: `Error: ${error.message}` }],
           isError: true
         };
       }
