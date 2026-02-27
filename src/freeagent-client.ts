@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse } from './types.js';
+import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectsResponse, Task, TasksResponse, User, UsersResponse, UserResponse } from './types.js';
 
 export class FreeAgentClient {
     private axiosInstance: AxiosInstance;
@@ -148,6 +148,60 @@ export class FreeAgentClient {
             return response.data.timeslip;
         } catch (error) {
             console.error('[API] Failed to stop timer:', error);
+            throw error;
+        }
+    }
+
+    async listProjects(params?: {
+        view?: string;
+        sort?: string;
+        contact?: string;
+    }): Promise<Project[]> {
+        try {
+            console.error('[API] Fetching projects with params:', params);
+            const response = await this.axiosInstance.get<ProjectsResponse>('/projects', { params });
+            return response.data.projects;
+        } catch (error) {
+            console.error('[API] Failed to fetch projects:', error);
+            throw error;
+        }
+    }
+
+    async listTasks(params?: {
+        project?: string;
+        view?: string;
+        sort?: string;
+    }): Promise<Task[]> {
+        try {
+            console.error('[API] Fetching tasks with params:', params);
+            const response = await this.axiosInstance.get<TasksResponse>('/tasks', { params });
+            return response.data.tasks;
+        } catch (error) {
+            console.error('[API] Failed to fetch tasks:', error);
+            throw error;
+        }
+    }
+
+    async getCurrentUser(): Promise<User> {
+        try {
+            console.error('[API] Fetching current user');
+            const response = await this.axiosInstance.get<UserResponse>('/users/me');
+            return response.data.user;
+        } catch (error) {
+            console.error('[API] Failed to fetch current user:', error);
+            throw error;
+        }
+    }
+
+    async listUsers(params?: {
+        view?: string;
+    }): Promise<User[]> {
+        try {
+            console.error('[API] Fetching users with params:', params);
+            const response = await this.axiosInstance.get<UsersResponse>('/users', { params });
+            return response.data.users;
+        } catch (error) {
+            console.error('[API] Failed to fetch users:', error);
             throw error;
         }
     }

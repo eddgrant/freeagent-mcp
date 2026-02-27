@@ -179,6 +179,78 @@ class FreeAgentServer {
             },
             required: ['id']
           }
+        },
+        {
+          name: 'list_projects',
+          description: 'List projects with optional filtering',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              view: {
+                type: 'string',
+                enum: ['active', 'completed', 'cancelled', 'hidden'],
+                description: 'Filter by project status'
+              },
+              sort: { type: 'string', description: 'Sort order' },
+              contact: { type: 'string', description: 'Filter by contact URL' }
+            }
+          }
+        },
+        {
+          name: 'list_tasks',
+          description: 'List tasks, optionally filtered by project',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              project: { type: 'string', description: 'Filter by project URL' },
+              view: { type: 'string', description: 'Filter view type' },
+              sort: { type: 'string', description: 'Sort order' }
+            }
+          }
+        },
+        {
+          name: 'list_users',
+          description: 'List users in the organisation',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              view: { type: 'string', description: 'Filter view type' }
+            }
+          }
+        },
+        {
+          name: 'get_current_user',
+          description: 'Get the currently authenticated user',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {}
+          }
+        },
+        {
+          name: 'create_timeslips',
+          description: 'Batch create multiple timeslips at once',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              timeslips: {
+                type: 'array',
+                description: 'Array of timeslip objects to create',
+                items: {
+                  type: 'object',
+                  properties: {
+                    task: { type: 'string', description: 'Task URL' },
+                    user: { type: 'string', description: 'User URL' },
+                    project: { type: 'string', description: 'Project URL' },
+                    dated_on: { type: 'string', description: 'Date (YYYY-MM-DD)' },
+                    hours: { type: 'string', description: 'Hours worked (e.g. "1.5")' },
+                    comment: { type: 'string', description: 'Optional comment' }
+                  },
+                  required: ['task', 'user', 'project', 'dated_on', 'hours']
+                }
+              }
+            },
+            required: ['timeslips']
+          }
         }
       ],
     }));
@@ -249,6 +321,87 @@ class FreeAgentServer {
             const timeslip = await this.client.stopTimer(id);
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(timeslip, null, 2) }]
+            };
+          }
+
+          case 'list_projects': {
+            const projects = await this.client.listProjects(request.params.arguments as any);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(projects, null, 2) }]
+            };
+          }
+
+          case 'list_tasks': {
+            const tasks = await this.client.listTasks(request.params.arguments as any);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(tasks, null, 2) }]
+            };
+          }
+
+          case 'list_users': {
+            const users = await this.client.listUsers(request.params.arguments as any);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(users, null, 2) }]
+            };
+          }
+
+          case 'get_current_user': {
+            const user = await this.client.getCurrentUser();
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(user, null, 2) }]
+            };
+          }
+
+          case 'create_timeslips': {
+            const { timeslips: timeslipItems } = request.params.arguments as { timeslips: unknown[] };
+            if (!Array.isArray(timeslipItems) || timeslipItems.length === 0) {
+              throw new Error('timeslips must be a non-empty array');
+            }
+            const validated = timeslipItems.map((item, i) => {
+              try {
+                return validateTimeslipAttributes(item);
+              } catch (e: any) {
+                throw new Error(`Timeslip at index ${i}: ${e.message}`);
+              }
+            });
+
+            // Deduplicate against existing timeslips for the date range
+            const dates = validated.map(t => t.dated_on);
+            const minDate = dates.reduce((a, b) => a < b ? a : b);
+            const maxDate = dates.reduce((a, b) => a > b ? a : b);
+            const existing = await this.client.listTimeslips({
+              from_date: minDate,
+              to_date: maxDate,
+              user: validated[0].user,
+            });
+
+            const duplicates: string[] = [];
+            const newTimeslips = validated.filter(t => {
+              const isDuplicate = existing.some(e =>
+                e.task === t.task &&
+                e.project === t.project &&
+                e.user === t.user &&
+                e.dated_on === t.dated_on
+              );
+              if (isDuplicate) {
+                duplicates.push(t.dated_on);
+              }
+              return !isDuplicate;
+            });
+
+            if (newTimeslips.length === 0) {
+              return {
+                content: [{ type: 'text' as const, text: `All ${validated.length} timeslips already exist (dates: ${duplicates.join(', ')}). No timeslips created.` }]
+              };
+            }
+
+            const created = await this.client.createTimeslips(newTimeslips);
+            let message = JSON.stringify(created, null, 2);
+            if (duplicates.length > 0) {
+              message += `\n\nSkipped ${duplicates.length} duplicate timeslip(s) for dates: ${duplicates.join(', ')}`;
+            }
+            return {
+              content: [{ type: 'text' as const, text: message }]
             };
           }
 
