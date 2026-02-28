@@ -374,6 +374,17 @@ class FreeAgentServer {
           }
         },
         {
+          name: 'mark_invoice_as_sent',
+          description: 'Mark a draft invoice as sent',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              id: { type: 'string', description: 'Invoice ID' }
+            },
+            required: ['id']
+          }
+        },
+        {
           name: 'create_timeslips',
           description: 'Batch create multiple timeslips at once',
           inputSchema: {
@@ -592,6 +603,14 @@ class FreeAgentServer {
           case 'get_invoice': {
             const { id } = request.params.arguments as { id: string };
             const invoice = await this.client.getInvoice(id);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(invoice, null, 2) }]
+            };
+          }
+
+          case 'mark_invoice_as_sent': {
+            const { id } = request.params.arguments as { id: string };
+            const invoice = await this.client.markInvoiceAsSent(id);
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(invoice, null, 2) }]
             };

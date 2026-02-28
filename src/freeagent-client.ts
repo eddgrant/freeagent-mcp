@@ -269,4 +269,19 @@ export class FreeAgentClient {
             throw error;
         }
     }
+
+    async markInvoiceAsSent(id: string): Promise<Invoice> {
+        try {
+            console.error('[API] Marking invoice as sent:', id);
+            const response = await this.axiosInstance.put<InvoiceResponse>(
+                `/invoices/${id}/transitions/mark_as_sent`,
+                null,
+                { headers: { 'Content-Length': '0' } }
+            );
+            return response.data.invoice;
+        } catch (error) {
+            console.error('[API] Failed to mark invoice as sent:', error);
+            throw error;
+        }
+    }
 }
