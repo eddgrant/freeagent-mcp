@@ -94,7 +94,7 @@ Here are some things you can ask Claude to do once the server is configured:
 - "How many hours have I logged this week?"
 
 ### Invoices
-- "Create an invoice for Equal Experts for March, pulling in all unbilled timeslips"
+- "Create an invoice for Client Foo for March, pulling in all unbilled timeslips"
 - "Update the invoice description to include the billing period"
 - "Download invoice 285 as a PDF to my invoices folder"
 - "Mark the draft invoice as sent"
@@ -107,26 +107,26 @@ Here are some things you can ask Claude to do once the server is configured:
 
 ## Tools Reference
 
-| Tool | Description |
-|------|-------------|
-| `list_timeslips` | List timeslips with optional date, project, task, user, and status filters |
-| `get_timeslip` | Get a single timeslip by ID |
-| `create_timeslip` | Create a new timeslip |
-| `create_timeslips` | Batch create multiple timeslips (with deduplication) |
-| `update_timeslip` | Update an existing timeslip |
-| `delete_timeslip` | Delete a timeslip |
-| `start_timer` | Start a timer on a timeslip |
-| `stop_timer` | Stop a running timer |
-| `create_invoice` | Create an invoice, optionally attaching unbilled timeslips |
-| `update_invoice` | Update invoice fields or line item descriptions |
-| `list_invoices` | List invoices with optional filters |
-| `get_invoice` | Get a single invoice by ID |
-| `download_invoice_pdf` | Download an invoice as base64-encoded PDF |
-| `mark_invoice_as_sent` | Transition a draft invoice to sent status |
-| `list_projects` | List projects with optional status filter |
-| `list_tasks` | List tasks, optionally filtered by project |
-| `list_users` | List users in the organisation |
-| `get_current_user` | Get the currently authenticated user |
+| Tool                   | Description                                                                |
+|------------------------|----------------------------------------------------------------------------|
+| `list_timeslips`       | List timeslips with optional date, project, task, user, and status filters |
+| `get_timeslip`         | Get a single timeslip by ID                                                |
+| `create_timeslip`      | Create a new timeslip                                                      |
+| `create_timeslips`     | Batch create multiple timeslips (with deduplication)                       |
+| `update_timeslip`      | Update an existing timeslip                                                |
+| `delete_timeslip`      | Delete a timeslip                                                          |
+| `start_timer`          | Start a timer on a timeslip                                                |
+| `stop_timer`           | Stop a running timer                                                       |
+| `create_invoice`       | Create an invoice, optionally attaching unbilled timeslips                 |
+| `update_invoice`       | Update invoice fields or line item descriptions                            |
+| `list_invoices`        | List invoices with optional filters                                        |
+| `get_invoice`          | Get a single invoice by ID                                                 |
+| `download_invoice_pdf` | Download an invoice as base64-encoded PDF                                  |
+| `mark_invoice_as_sent` | Transition a draft invoice to sent status                                  |
+| `list_projects`        | List projects with optional status filter                                  |
+| `list_tasks`           | List tasks, optionally filtered by project                                 |
+| `list_users`           | List users in the organisation                                             |
+| `get_current_user`     | Get the currently authenticated user                                       |
 
 ## Development
 
