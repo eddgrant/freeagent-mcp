@@ -26,18 +26,14 @@ An MCP (Model Context Protocol) server for managing FreeAgent accounting data. T
 
 ### Other
 - Automatic OAuth token refresh
-- Docker support
 
 ## Prerequisites
 
-- Node.js 18+ (for direct Node.js usage)
-- Docker (for containerised usage)
+- Docker
 - A FreeAgent account with API access
 - OAuth credentials from the [FreeAgent Developer Dashboard](https://dev.freeagent.com)
 
 ## Installation
-
-### Option 1: Direct Node.js Installation
 
 1. Clone the repository:
 ```bash
@@ -45,12 +41,7 @@ git clone https://github.com/markpitt/freeagent-mcp.git
 cd freeagent-mcp
 ```
 
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Get your OAuth tokens:
+2. Get your OAuth tokens:
 ```bash
 export FREEAGENT_CLIENT_ID="your_client_id"
 export FREEAGENT_CLIENT_SECRET="your_client_secret"
@@ -58,21 +49,7 @@ export FREEAGENT_CLIENT_SECRET="your_client_secret"
 node scripts/get-oauth-tokens.js
 ```
 
-### Option 2: Docker Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/markpitt/freeagent-mcp.git
-cd freeagent-mcp
-```
-
-2. Create your environment file:
-```bash
-cp .env.example .env
-# Edit .env with your FreeAgent credentials
-```
-
-3. Build Docker image:
+3. Build the Docker image:
 ```bash
 docker build -t freeagent-mcp .
 ```
@@ -80,26 +57,6 @@ docker build -t freeagent-mcp .
 ## Configuration
 
 Add the server to your Claude Code MCP settings (`~/.claude/settings.json`):
-
-### For Node.js:
-```json
-{
-  "mcpServers": {
-    "freeagent": {
-      "command": "node",
-      "args": ["path/to/freeagent-mcp/build/index.js"],
-      "env": {
-        "FREEAGENT_CLIENT_ID": "your_client_id",
-        "FREEAGENT_CLIENT_SECRET": "your_client_secret",
-        "FREEAGENT_ACCESS_TOKEN": "your_access_token",
-        "FREEAGENT_REFRESH_TOKEN": "your_refresh_token"
-      }
-    }
-  }
-}
-```
-
-### For Docker:
 ```json
 {
   "mcpServers": {
