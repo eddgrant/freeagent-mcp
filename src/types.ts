@@ -155,6 +155,10 @@ export interface InvoicesResponse {
     invoices: Invoice[];
 }
 
+export interface InvoicePdfResponse {
+    pdf: { content: string };
+}
+
 export interface FreeAgentConfig {
     clientId: string;
     clientSecret: string;

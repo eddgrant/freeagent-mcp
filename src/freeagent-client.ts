@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectsResponse, Task, TasksResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse } from './types.js';
+import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectsResponse, Task, TasksResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse, InvoicePdfResponse } from './types.js';
 
 export class FreeAgentClient {
     private axiosInstance: AxiosInstance;
@@ -255,6 +255,17 @@ export class FreeAgentClient {
             return response.data.invoice;
         } catch (error) {
             console.error('[API] Failed to update invoice:', error);
+            throw error;
+        }
+    }
+
+    async downloadInvoicePdf(id: string): Promise<string> {
+        try {
+            console.error('[API] Downloading invoice PDF:', id);
+            const response = await this.axiosInstance.get<InvoicePdfResponse>(`/invoices/${id}/pdf`);
+            return response.data.pdf.content;
+        } catch (error) {
+            console.error('[API] Failed to download invoice PDF:', error);
             throw error;
         }
     }

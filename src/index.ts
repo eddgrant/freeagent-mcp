@@ -363,6 +363,17 @@ class FreeAgentServer {
           }
         },
         {
+          name: 'download_invoice_pdf',
+          description: 'Download an invoice as a PDF. Returns base64-encoded PDF content.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              id: { type: 'string', description: 'Invoice ID' }
+            },
+            required: ['id']
+          }
+        },
+        {
           name: 'create_timeslips',
           description: 'Batch create multiple timeslips at once',
           inputSchema: {
@@ -538,6 +549,14 @@ class FreeAgentServer {
             }
             return {
               content: [{ type: 'text' as const, text: message }]
+            };
+          }
+
+          case 'download_invoice_pdf': {
+            const { id } = request.params.arguments as { id: string };
+            const base64Content = await this.client.downloadInvoicePdf(id);
+            return {
+              content: [{ type: 'text' as const, text: base64Content }]
             };
           }
 
