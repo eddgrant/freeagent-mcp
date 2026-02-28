@@ -95,11 +95,13 @@ export interface UserResponse {
 }
 
 export interface InvoiceItemAttributes {
+    id?: string;
     item_type: string;
     description: string;
     quantity: string;
     price: string;
     sales_tax_rate?: string;
+    _destroy?: number;
 }
 
 export interface InvoiceAttributes {

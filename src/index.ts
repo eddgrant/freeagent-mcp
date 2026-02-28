@@ -327,6 +327,42 @@ class FreeAgentServer {
           }
         },
         {
+          name: 'update_invoice',
+          description: 'Update an existing invoice. Use this to modify line item descriptions, payment terms, comments, etc.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              id: { type: 'string', description: 'Invoice ID' },
+              payment_terms_in_days: { type: 'number', description: 'Payment terms in days' },
+              comments: { type: 'string', description: 'Additional comments' },
+              ec_status: {
+                type: 'string',
+                enum: ['UK Non-EC', 'EC VAT Registered', 'EC VAT Moss', 'EC Non-VAT Registered', 'Non-EC'],
+                description: 'EC/VAT status'
+              },
+              invoice_items: {
+                type: 'array',
+                description: 'Updated line items. Include "id" (from invoice_item URL) to update an existing item, or omit "id" to add a new item. Set "_destroy": 1 to delete an item.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string', description: 'Invoice item ID (from URL) - required to update an existing item' },
+                    position: { type: 'number', description: 'Line item position (starting at 1)' },
+                    item_type: { type: 'string', description: 'Item type (e.g. "Days", "Hours")' },
+                    description: { type: 'string', description: 'Line item description/details' },
+                    quantity: { type: 'string', description: 'Quantity' },
+                    price: { type: 'string', description: 'Unit price' },
+                    sales_tax_rate: { type: 'string', description: 'Sales tax rate (e.g. "20.0")' },
+                    _destroy: { type: 'number', description: 'Set to 1 to delete this line item' }
+                  },
+                  required: ['item_type', 'description', 'quantity', 'price']
+                }
+              }
+            },
+            required: ['id']
+          }
+        },
+        {
           name: 'create_timeslips',
           description: 'Batch create multiple timeslips at once',
           inputSchema: {
@@ -502,6 +538,20 @@ class FreeAgentServer {
             }
             return {
               content: [{ type: 'text' as const, text: message }]
+            };
+          }
+
+          case 'update_invoice': {
+            const { id, ...updates } = request.params.arguments as { id: string } & Record<string, unknown>;
+            const invoiceUpdates: Partial<InvoiceAttributes> = {};
+            if (typeof updates.payment_terms_in_days === 'number') invoiceUpdates.payment_terms_in_days = updates.payment_terms_in_days;
+            if (typeof updates.comments === 'string') invoiceUpdates.comments = updates.comments;
+            if (typeof updates.ec_status === 'string') invoiceUpdates.ec_status = updates.ec_status;
+            if (Array.isArray(updates.invoice_items)) invoiceUpdates.invoice_items = updates.invoice_items as InvoiceAttributes['invoice_items'];
+
+            const invoice = await this.client.updateInvoice(id, invoiceUpdates);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(invoice, null, 2) }]
             };
           }
 

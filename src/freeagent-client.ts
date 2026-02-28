@@ -245,4 +245,17 @@ export class FreeAgentClient {
             throw error;
         }
     }
+
+    async updateInvoice(id: string, invoice: Partial<InvoiceAttributes>): Promise<Invoice> {
+        try {
+            console.error('[API] Updating invoice:', id, invoice);
+            const response = await this.axiosInstance.put<InvoiceResponse>(`/invoices/${id}`, {
+                invoice
+            });
+            return response.data.invoice;
+        } catch (error) {
+            console.error('[API] Failed to update invoice:', error);
+            throw error;
+        }
+    }
 }
