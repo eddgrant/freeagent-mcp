@@ -8,7 +8,7 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { FreeAgentClient } from './freeagent-client.js';
-import { TimeslipAttributes } from './types.js';
+import { TimeslipAttributes, InvoiceAttributes } from './types.js';
 
 const CLIENT_ID = process.env.FREEAGENT_CLIENT_ID as string;
 const CLIENT_SECRET = process.env.FREEAGENT_CLIENT_SECRET as string;
@@ -42,6 +42,33 @@ function validateTimeslipAttributes(data: unknown): TimeslipAttributes {
     hours: attrs.hours,
     comment: attrs.comment as string | undefined
   };
+}
+
+function validateInvoiceAttributes(data: unknown): InvoiceAttributes {
+  if (typeof data !== 'object' || !data) {
+    throw new Error('Invalid invoice data: must be an object');
+  }
+
+  const attrs = data as Record<string, unknown>;
+
+  if (typeof attrs.contact !== 'string' || typeof attrs.dated_on !== 'string') {
+    throw new Error('Invalid invoice data: contact and dated_on are required');
+  }
+
+  const invoice: InvoiceAttributes = {
+    contact: attrs.contact,
+    dated_on: attrs.dated_on,
+    payment_terms_in_days: typeof attrs.payment_terms_in_days === 'number' ? attrs.payment_terms_in_days : 30,
+  };
+
+  if (typeof attrs.project === 'string') invoice.project = attrs.project;
+  if (typeof attrs.currency === 'string') invoice.currency = attrs.currency;
+  if (typeof attrs.comments === 'string') invoice.comments = attrs.comments;
+  if (typeof attrs.ec_status === 'string') invoice.ec_status = attrs.ec_status;
+  if (typeof attrs.include_timeslips === 'string') invoice.include_timeslips = attrs.include_timeslips;
+  if (Array.isArray(attrs.invoice_items)) invoice.invoice_items = attrs.invoice_items as InvoiceAttributes['invoice_items'];
+
+  return invoice;
 }
 
 class FreeAgentServer {
@@ -227,6 +254,79 @@ class FreeAgentServer {
           }
         },
         {
+          name: 'create_invoice',
+          description: 'Create a new invoice. Can optionally attach unbilled timeslips using include_timeslips grouping mode.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              contact: { type: 'string', description: 'Contact URL' },
+              project: { type: 'string', description: 'Project URL' },
+              dated_on: { type: 'string', description: 'Invoice date (YYYY-MM-DD)' },
+              payment_terms_in_days: { type: 'number', description: 'Payment terms in days (default: 30)' },
+              comments: { type: 'string', description: 'Additional comments' },
+              ec_status: {
+                type: 'string',
+                enum: ['UK Non-EC', 'EC VAT Registered', 'EC VAT Moss', 'EC Non-VAT Registered', 'Non-EC'],
+                description: 'EC/VAT status'
+              },
+              include_timeslips: {
+                type: 'string',
+                enum: [
+                  'billed_grouped_by_timeslip',
+                  'billed_grouped_by_single_timeslip',
+                  'billed_grouped_by_timeslip_task',
+                  'billed_grouped_by_timeslip_date'
+                ],
+                description: 'How to group unbilled timeslips into invoice line items'
+              },
+              invoice_items: {
+                type: 'array',
+                description: 'Manual line items (use instead of include_timeslips for full control over descriptions)',
+                items: {
+                  type: 'object',
+                  properties: {
+                    item_type: { type: 'string', description: 'Item type (e.g. "Days", "Hours")' },
+                    description: { type: 'string', description: 'Line item description' },
+                    quantity: { type: 'string', description: 'Quantity' },
+                    price: { type: 'string', description: 'Unit price' },
+                    sales_tax_rate: { type: 'string', description: 'Sales tax rate (e.g. "20.0")' }
+                  },
+                  required: ['item_type', 'description', 'quantity', 'price']
+                }
+              }
+            },
+            required: ['contact', 'dated_on']
+          }
+        },
+        {
+          name: 'list_invoices',
+          description: 'List invoices with optional filtering',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              project: { type: 'string', description: 'Filter by project URL' },
+              contact: { type: 'string', description: 'Filter by contact URL' },
+              view: {
+                type: 'string',
+                enum: ['recent_open_or_overdue', 'open_or_overdue', 'draft', 'scheduled_to_email', 'thank_you_emails', 'reminders', 'overdue'],
+                description: 'Filter view type'
+              },
+              sort: { type: 'string', description: 'Sort order' }
+            }
+          }
+        },
+        {
+          name: 'get_invoice',
+          description: 'Get a single invoice by ID',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              id: { type: 'string', description: 'Invoice ID' }
+            },
+            required: ['id']
+          }
+        },
+        {
           name: 'create_timeslips',
           description: 'Batch create multiple timeslips at once',
           inputSchema: {
@@ -402,6 +502,29 @@ class FreeAgentServer {
             }
             return {
               content: [{ type: 'text' as const, text: message }]
+            };
+          }
+
+          case 'create_invoice': {
+            const invoiceAttrs = validateInvoiceAttributes(request.params.arguments);
+            const invoice = await this.client.createInvoice(invoiceAttrs);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(invoice, null, 2) }]
+            };
+          }
+
+          case 'list_invoices': {
+            const invoices = await this.client.listInvoices(request.params.arguments as any);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(invoices, null, 2) }]
+            };
+          }
+
+          case 'get_invoice': {
+            const { id } = request.params.arguments as { id: string };
+            const invoice = await this.client.getInvoice(id);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(invoice, null, 2) }]
             };
           }
 

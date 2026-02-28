@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectsResponse, Task, TasksResponse, User, UsersResponse, UserResponse } from './types.js';
+import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectsResponse, Task, TasksResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse } from './types.js';
 
 export class FreeAgentClient {
     private axiosInstance: AxiosInstance;
@@ -202,6 +202,46 @@ export class FreeAgentClient {
             return response.data.users;
         } catch (error) {
             console.error('[API] Failed to fetch users:', error);
+            throw error;
+        }
+    }
+
+    async createInvoice(invoice: InvoiceAttributes): Promise<Invoice> {
+        try {
+            console.error('[API] Creating invoice:', invoice);
+            const response = await this.axiosInstance.post<InvoiceResponse>('/invoices', {
+                invoice
+            });
+            return response.data.invoice;
+        } catch (error) {
+            console.error('[API] Failed to create invoice:', error);
+            throw error;
+        }
+    }
+
+    async listInvoices(params?: {
+        project?: string;
+        contact?: string;
+        view?: string;
+        sort?: string;
+    }): Promise<Invoice[]> {
+        try {
+            console.error('[API] Fetching invoices with params:', params);
+            const response = await this.axiosInstance.get<InvoicesResponse>('/invoices', { params });
+            return response.data.invoices;
+        } catch (error) {
+            console.error('[API] Failed to fetch invoices:', error);
+            throw error;
+        }
+    }
+
+    async getInvoice(id: string): Promise<Invoice> {
+        try {
+            console.error('[API] Fetching invoice:', id);
+            const response = await this.axiosInstance.get<InvoiceResponse>(`/invoices/${id}`);
+            return response.data.invoice;
+        } catch (error) {
+            console.error('[API] Failed to fetch invoice:', error);
             throw error;
         }
     }
