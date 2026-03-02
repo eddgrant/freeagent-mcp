@@ -4,6 +4,8 @@ An MCP (Model Context Protocol) server for managing FreeAgent accounting data. T
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+> **Warning: This server can create, modify, and delete real financial data in your FreeAgent account, including invoices and timeslips. It has not been extensively tested and is provided as-is with no warranty. Use entirely at your own risk. The authors accept no responsibility for any data loss or unintended changes to your accounting records.**
+
 ## Features
 
 ### Timeslips
@@ -122,6 +124,8 @@ Here are some things you can ask Claude to do once the server is configured:
 | `list_invoices`        | List invoices with optional filters                                        |
 | `get_invoice`          | Get a single invoice by ID                                                 |
 | `download_invoice_pdf` | Download an invoice as base64-encoded PDF                                  |
+| `delete_invoice`       | Delete an invoice (requires confirmation for non-draft invoices)           |
+| `mark_invoice_as_draft`| Transition a sent invoice back to draft status                             |
 | `mark_invoice_as_sent` | Transition a draft invoice to sent status                                  |
 | `list_projects`        | List projects with optional status filter                                  |
 | `list_tasks`           | List tasks, optionally filtered by project                                 |
