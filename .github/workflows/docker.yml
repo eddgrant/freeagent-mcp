@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +39,7 @@ jobs:
             type=raw,value=pr-${{ github.event.pull_request.number }}-${{ github.sha }},enable=${{ github.event_name == 'pull_request' }}
 
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: .
           push: true
@@ -45,3 +47,31 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tags = `${{ steps.meta.outputs.tags }}`.split('\n').filter(Boolean);
+            const digest = '${{ steps.build.outputs.digest }}';
+            const body = [
+              '### Docker image pushed',
+              '',
+              '| Detail | Value |',
+              '|--------|-------|',
+              ...tags.map(tag => `| Tag | \`${tag}\` |`),
+              `| Digest | \`${digest}\` |`,
+              '',
+              'Pull with:',
+              '```',
+              `docker pull ${tags[0]}`,
+              '```',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
