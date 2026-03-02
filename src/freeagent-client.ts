@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse } from './types.js';
+import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectsResponse, Task, TasksResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse, InvoicePdfResponse } from './types.js';
 
 export class FreeAgentClient {
     private axiosInstance: AxiosInstance;
@@ -15,11 +15,13 @@ export class FreeAgentClient {
             }
         });
 
-        // Add response interceptor for token refresh
+        // Refresh the OAuth token on 401 responses. The _retried flag prevents
+        // an infinite loop when the refresh token itself is invalid or expired.
         this.axiosInstance.interceptors.response.use(
             response => response,
             async error => {
-                if (error.response?.status === 401) {
+                if (error.response?.status === 401 && !error.config._retried) {
+                    error.config._retried = true;
                     await this.refreshToken();
                     error.config.headers['Authorization'] = `Bearer ${this.config.accessToken}`;
                     return this.axiosInstance.request(error.config);
@@ -44,8 +46,8 @@ export class FreeAgentClient {
             this.axiosInstance.defaults.headers['Authorization'] = `Bearer ${this.config.accessToken}`;
 
             console.error('[Auth] Successfully refreshed access token');
-        } catch (error) {
-            console.error('[Auth] Failed to refresh token:', error);
+        } catch (error: any) {
+            console.error('[Auth] Failed to refresh token:', error.message);
             throw error;
         }
     }
@@ -64,8 +66,8 @@ export class FreeAgentClient {
             console.error('[API] Fetching timeslips with params:', params);
             const response = await this.axiosInstance.get<TimeslipsResponse>('/timeslips', { params });
             return response.data.timeslips;
-        } catch (error) {
-            console.error('[API] Failed to fetch timeslips:', error);
+        } catch (error: any) {
+            console.error('[API] Failed to fetch timeslips:', error.message);
             throw error;
         }
     }
@@ -75,8 +77,8 @@ export class FreeAgentClient {
             console.error('[API] Fetching timeslip:', id);
             const response = await this.axiosInstance.get<TimeslipResponse>(`/timeslips/${id}`);
             return response.data.timeslip;
-        } catch (error) {
-            console.error('[API] Failed to fetch timeslip:', error);
+        } catch (error: any) {
+            console.error('[API] Failed to fetch timeslip:', error.message);
             throw error;
         }
     }
@@ -88,8 +90,8 @@ export class FreeAgentClient {
                 timeslip
             });
             return response.data.timeslip;
-        } catch (error) {
-            console.error('[API] Failed to create timeslip:', error);
+        } catch (error: any) {
+            console.error('[API] Failed to create timeslip:', error.message);
             throw error;
         }
     }
@@ -101,8 +103,8 @@ export class FreeAgentClient {
                 timeslips
             });
             return response.data.timeslips;
-        } catch (error) {
-            console.error('[API] Failed to create timeslips:', error);
+        } catch (error: any) {
+            console.error('[API] Failed to create timeslips:', error.message);
             throw error;
         }
     }
@@ -114,8 +116,8 @@ export class FreeAgentClient {
                 timeslip
             });
             return response.data.timeslip;
-        } catch (error) {
-            console.error('[API] Failed to update timeslip:', error);
+        } catch (error: any) {
+            console.error('[API] Failed to update timeslip:', error.message);
             throw error;
         }
     }
@@ -124,8 +126,8 @@ export class FreeAgentClient {
         try {
             console.error('[API] Deleting timeslip:', id);
             await this.axiosInstance.delete(`/timeslips/${id}`);
-        } catch (error) {
-            console.error('[API] Failed to delete timeslip:', error);
+        } catch (error: any) {
+            console.error('[API] Failed to delete timeslip:', error.message);
             throw error;
         }
     }
@@ -135,8 +137,8 @@ export class FreeAgentClient {
             console.error('[API] Starting timer for timeslip:', id);
             const response = await this.axiosInstance.post<TimeslipResponse>(`/timeslips/${id}/timer`);
             return response.data.timeslip;
-        } catch (error) {
-            console.error('[API] Failed to start timer:', error);
+        } catch (error: any) {
+            console.error('[API] Failed to start timer:', error.message);
             throw error;
         }
     }
@@ -146,8 +148,166 @@ export class FreeAgentClient {
             console.error('[API] Stopping timer for timeslip:', id);
             const response = await this.axiosInstance.delete<TimeslipResponse>(`/timeslips/${id}/timer`);
             return response.data.timeslip;
-        } catch (error) {
-            console.error('[API] Failed to stop timer:', error);
+        } catch (error: any) {
+            console.error('[API] Failed to stop timer:', error.message);
+            throw error;
+        }
+    }
+
+    async listProjects(params?: {
+        view?: string;
+        sort?: string;
+        contact?: string;
+    }): Promise<Project[]> {
+        try {
+            console.error('[API] Fetching projects with params:', params);
+            const response = await this.axiosInstance.get<ProjectsResponse>('/projects', { params });
+            return response.data.projects;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch projects:', error.message);
+            throw error;
+        }
+    }
+
+    async listTasks(params?: {
+        project?: string;
+        view?: string;
+        sort?: string;
+    }): Promise<Task[]> {
+        try {
+            console.error('[API] Fetching tasks with params:', params);
+            const response = await this.axiosInstance.get<TasksResponse>('/tasks', { params });
+            return response.data.tasks;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch tasks:', error.message);
+            throw error;
+        }
+    }
+
+    async getCurrentUser(): Promise<User> {
+        try {
+            console.error('[API] Fetching current user');
+            const response = await this.axiosInstance.get<UserResponse>('/users/me');
+            return response.data.user;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch current user:', error.message);
+            throw error;
+        }
+    }
+
+    async listUsers(params?: {
+        view?: string;
+    }): Promise<User[]> {
+        try {
+            console.error('[API] Fetching users with params:', params);
+            const response = await this.axiosInstance.get<UsersResponse>('/users', { params });
+            return response.data.users;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch users:', error.message);
+            throw error;
+        }
+    }
+
+    async createInvoice(invoice: InvoiceAttributes): Promise<Invoice> {
+        try {
+            console.error('[API] Creating invoice:', invoice);
+            const response = await this.axiosInstance.post<InvoiceResponse>('/invoices', {
+                invoice
+            });
+            return response.data.invoice;
+        } catch (error: any) {
+            console.error('[API] Failed to create invoice:', error.message);
+            throw error;
+        }
+    }
+
+    async listInvoices(params?: {
+        project?: string;
+        contact?: string;
+        view?: string;
+        sort?: string;
+    }): Promise<Invoice[]> {
+        try {
+            console.error('[API] Fetching invoices with params:', params);
+            const response = await this.axiosInstance.get<InvoicesResponse>('/invoices', { params });
+            return response.data.invoices;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch invoices:', error.message);
+            throw error;
+        }
+    }
+
+    async getInvoice(id: string): Promise<Invoice> {
+        try {
+            console.error('[API] Fetching invoice:', id);
+            const response = await this.axiosInstance.get<InvoiceResponse>(`/invoices/${id}`);
+            return response.data.invoice;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch invoice:', error.message);
+            throw error;
+        }
+    }
+
+    async updateInvoice(id: string, invoice: Partial<InvoiceAttributes>): Promise<Invoice> {
+        try {
+            console.error('[API] Updating invoice:', id, invoice);
+            const response = await this.axiosInstance.put<InvoiceResponse>(`/invoices/${id}`, {
+                invoice
+            });
+            return response.data.invoice;
+        } catch (error: any) {
+            console.error('[API] Failed to update invoice:', error.message);
+            throw error;
+        }
+    }
+
+    async downloadInvoicePdf(id: string): Promise<string> {
+        try {
+            console.error('[API] Downloading invoice PDF:', id);
+            const response = await this.axiosInstance.get<InvoicePdfResponse>(`/invoices/${id}/pdf`);
+            return response.data.pdf.content;
+        } catch (error: any) {
+            console.error('[API] Failed to download invoice PDF:', error.message);
+            throw error;
+        }
+    }
+
+    async deleteInvoice(id: string): Promise<void> {
+        try {
+            console.error('[API] Deleting invoice:', id);
+            await this.axiosInstance.delete(`/invoices/${id}`);
+        } catch (error: any) {
+            console.error('[API] Failed to delete invoice:', error.message);
+            throw error;
+        }
+    }
+
+    async markInvoiceAsDraft(id: string): Promise<Invoice> {
+        try {
+            console.error('[API] Marking invoice as draft:', id);
+            const response = await this.axiosInstance.put<InvoiceResponse>(
+                `/invoices/${id}/transitions/mark_as_draft`,
+                null,
+                { headers: { 'Content-Length': '0' } }
+            );
+            return response.data.invoice;
+        } catch (error: any) {
+            console.error('[API] Failed to mark invoice as draft:', error.message);
+            throw error;
+        }
+    }
+
+    async markInvoiceAsSent(id: string): Promise<Invoice> {
+        try {
+            console.error('[API] Marking invoice as sent:', id);
+            const response = await this.axiosInstance.put<InvoiceResponse>(
+                `/invoices/${id}/transitions/mark_as_sent`,
+                null,
+                { headers: { 'Content-Length': '0' } }
+            );
+            return response.data.invoice;
+        } catch (error: any) {
+            console.error('[API] Failed to mark invoice as sent:', error.message);
             throw error;
         }
     }

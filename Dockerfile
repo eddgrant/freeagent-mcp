@@ -20,4 +20,9 @@ ENV NODE_ENV=production
 
 RUN npm ci --ignore-scripts --omit=dev
 
+RUN addgroup --system --gid 1001 mcp && \
+    adduser --system --uid 1001 --ingroup mcp mcp && \
+    chown -R mcp:mcp /app
+USER mcp
+
 ENTRYPOINT ["node", "build/index.js"]
