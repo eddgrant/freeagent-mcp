@@ -44,6 +44,42 @@ function validateTimeslipAttributes(data: unknown): TimeslipAttributes {
   };
 }
 
+// Prevent path traversal via ID parameters interpolated into API URLs.
+function validateId(id: unknown): string {
+  if (typeof id !== 'string' || !/^\d+$/.test(id)) {
+    throw new Error('Invalid ID: must be a numeric string');
+  }
+  return id;
+}
+
+function validateInvoiceItemAttributes(item: unknown, index: number): InvoiceAttributes['invoice_items'] extends (infer T)[] | undefined ? T : never {
+  if (typeof item !== 'object' || !item) {
+    throw new Error(`Invoice item at index ${index}: must be an object`);
+  }
+  const attrs = item as Record<string, unknown>;
+
+  if (typeof attrs.item_type !== 'string' ||
+    typeof attrs.description !== 'string' ||
+    typeof attrs.quantity !== 'string' ||
+    typeof attrs.price !== 'string') {
+    throw new Error(`Invoice item at index ${index}: item_type, description, quantity, and price are required strings`);
+  }
+
+  const validated: Record<string, unknown> = {
+    item_type: attrs.item_type,
+    description: attrs.description,
+    quantity: attrs.quantity,
+    price: attrs.price,
+  };
+
+  if (typeof attrs.id === 'string') validated.id = attrs.id;
+  if (typeof attrs.sales_tax_rate === 'string') validated.sales_tax_rate = attrs.sales_tax_rate;
+  if (typeof attrs.position === 'number') validated.position = attrs.position;
+  if (attrs._destroy === 1) validated._destroy = 1;
+
+  return validated as any;
+}
+
 function validateInvoiceAttributes(data: unknown): InvoiceAttributes {
   if (typeof data !== 'object' || !data) {
     throw new Error('Invalid invoice data: must be an object');
@@ -66,7 +102,9 @@ function validateInvoiceAttributes(data: unknown): InvoiceAttributes {
   if (typeof attrs.comments === 'string') invoice.comments = attrs.comments;
   if (typeof attrs.ec_status === 'string') invoice.ec_status = attrs.ec_status;
   if (typeof attrs.include_timeslips === 'string') invoice.include_timeslips = attrs.include_timeslips;
-  if (Array.isArray(attrs.invoice_items)) invoice.invoice_items = attrs.invoice_items as InvoiceAttributes['invoice_items'];
+  if (Array.isArray(attrs.invoice_items)) {
+    invoice.invoice_items = attrs.invoice_items.map((item, i) => validateInvoiceItemAttributes(item, i));
+  }
 
   return invoice;
 }
@@ -374,6 +412,29 @@ class FreeAgentServer {
           }
         },
         {
+          name: 'delete_invoice',
+          description: 'Delete an invoice. If the invoice has been sent, you must pass confirm: true to acknowledge that deleting sent invoices is bad accounting practice.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              id: { type: 'string', description: 'Invoice ID' },
+              confirm: { type: 'boolean', description: 'Required when invoice status is not Draft. Confirms intent to delete a sent/non-draft invoice.' }
+            },
+            required: ['id']
+          }
+        },
+        {
+          name: 'mark_invoice_as_draft',
+          description: 'Transition a sent invoice back to draft status',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              id: { type: 'string', description: 'Invoice ID' }
+            },
+            required: ['id']
+          }
+        },
+        {
           name: 'mark_invoice_as_sent',
           description: 'Mark a draft invoice as sent',
           inputSchema: {
@@ -426,7 +487,8 @@ class FreeAgentServer {
           }
 
           case 'get_timeslip': {
-            const { id } = request.params.arguments as { id: string };
+            const { id: rawId } = request.params.arguments as { id: string };
+            const id = validateId(rawId);
             const timeslip = await this.client.getTimeslip(id);
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(timeslip, null, 2) }]
@@ -442,7 +504,8 @@ class FreeAgentServer {
           }
 
           case 'update_timeslip': {
-            const { id, ...updates } = request.params.arguments as { id: string } & Record<string, unknown>;
+            const { id: rawId, ...updates } = request.params.arguments as { id: string } & Record<string, unknown>;
+            const id = validateId(rawId);
             // Only include valid update fields
             const validUpdates: Partial<TimeslipAttributes> = {};
             if (typeof updates.task === 'string') validUpdates.task = updates.task;
@@ -459,7 +522,8 @@ class FreeAgentServer {
           }
 
           case 'delete_timeslip': {
-            const { id } = request.params.arguments as { id: string };
+            const { id: rawId } = request.params.arguments as { id: string };
+            const id = validateId(rawId);
             await this.client.deleteTimeslip(id);
             return {
               content: [{ type: 'text' as const, text: 'Timeslip deleted successfully' }]
@@ -467,7 +531,8 @@ class FreeAgentServer {
           }
 
           case 'start_timer': {
-            const { id } = request.params.arguments as { id: string };
+            const { id: rawId } = request.params.arguments as { id: string };
+            const id = validateId(rawId);
             const timeslip = await this.client.startTimer(id);
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(timeslip, null, 2) }]
@@ -475,7 +540,8 @@ class FreeAgentServer {
           }
 
           case 'stop_timer': {
-            const { id } = request.params.arguments as { id: string };
+            const { id: rawId } = request.params.arguments as { id: string };
+            const id = validateId(rawId);
             const timeslip = await this.client.stopTimer(id);
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(timeslip, null, 2) }]
@@ -564,7 +630,8 @@ class FreeAgentServer {
           }
 
           case 'download_invoice_pdf': {
-            const { id } = request.params.arguments as { id: string };
+            const { id: rawId } = request.params.arguments as { id: string };
+            const id = validateId(rawId);
             const base64Content = await this.client.downloadInvoicePdf(id);
             return {
               content: [{ type: 'text' as const, text: base64Content }]
@@ -572,12 +639,15 @@ class FreeAgentServer {
           }
 
           case 'update_invoice': {
-            const { id, ...updates } = request.params.arguments as { id: string } & Record<string, unknown>;
+            const { id: rawId, ...updates } = request.params.arguments as { id: string } & Record<string, unknown>;
+            const id = validateId(rawId);
             const invoiceUpdates: Partial<InvoiceAttributes> = {};
             if (typeof updates.payment_terms_in_days === 'number') invoiceUpdates.payment_terms_in_days = updates.payment_terms_in_days;
             if (typeof updates.comments === 'string') invoiceUpdates.comments = updates.comments;
             if (typeof updates.ec_status === 'string') invoiceUpdates.ec_status = updates.ec_status;
-            if (Array.isArray(updates.invoice_items)) invoiceUpdates.invoice_items = updates.invoice_items as InvoiceAttributes['invoice_items'];
+            if (Array.isArray(updates.invoice_items)) {
+              invoiceUpdates.invoice_items = updates.invoice_items.map((item, i) => validateInvoiceItemAttributes(item, i));
+            }
 
             const invoice = await this.client.updateInvoice(id, invoiceUpdates);
             return {
@@ -601,15 +671,42 @@ class FreeAgentServer {
           }
 
           case 'get_invoice': {
-            const { id } = request.params.arguments as { id: string };
+            const { id: rawId } = request.params.arguments as { id: string };
+            const id = validateId(rawId);
             const invoice = await this.client.getInvoice(id);
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(invoice, null, 2) }]
             };
           }
 
+          case 'delete_invoice': {
+            const { id: rawId, confirm } = request.params.arguments as { id: string; confirm?: boolean };
+            const id = validateId(rawId);
+            const invoice = await this.client.getInvoice(id);
+            if (invoice.status !== 'Draft' && confirm !== true) {
+              return {
+                content: [{ type: 'text' as const, text: `Invoice ${id} has status "${invoice.status}". Deleting a non-draft invoice is bad accounting practice (per HMRC guidance). To proceed, retry with confirm: true.` }],
+                isError: true
+              };
+            }
+            await this.client.deleteInvoice(id);
+            return {
+              content: [{ type: 'text' as const, text: `Invoice ${id} deleted successfully` }]
+            };
+          }
+
+          case 'mark_invoice_as_draft': {
+            const { id: rawId } = request.params.arguments as { id: string };
+            const id = validateId(rawId);
+            const invoice = await this.client.markInvoiceAsDraft(id);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(invoice, null, 2) }]
+            };
+          }
+
           case 'mark_invoice_as_sent': {
-            const { id } = request.params.arguments as { id: string };
+            const { id: rawId } = request.params.arguments as { id: string };
+            const id = validateId(rawId);
             const invoice = await this.client.markInvoiceAsSent(id);
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(invoice, null, 2) }]
