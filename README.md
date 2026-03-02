@@ -30,51 +30,68 @@ An MCP server that lets AI assistants like Claude manage your FreeAgent accounti
 
 You'll need Docker, a FreeAgent account with API access, and OAuth credentials from the [FreeAgent Developer Dashboard](https://dev.freeagent.com).
 
-1. Clone and enter the repository:
-   ```bash
-   git clone https://github.com/eddgrant/freeagent-mcp.git
-   cd freeagent-mcp
-   ```
+### 1. Get your OAuth tokens
 
-2. Get your OAuth tokens:
-   ```bash
-   export FREEAGENT_CLIENT_ID="your_client_id"
-   export FREEAGENT_CLIENT_SECRET="your_client_secret"
+```bash
+export FREEAGENT_CLIENT_ID="your_client_id"
+export FREEAGENT_CLIENT_SECRET="your_client_secret"
 
-   node scripts/get-oauth-tokens.js
-   ```
+node scripts/get-oauth-tokens.js
+```
 
-3. Build the Docker image:
-   ```bash
-   docker build -t freeagent-mcp .
-   ```
+### 2. Configure the MCP server
 
-4. Add the server to your Claude Code MCP settings (`~/.claude/settings.json`):
-   ```json
-   {
-     "mcpServers": {
-       "freeagent": {
-         "command": "docker",
-         "args": [
-           "run",
-           "-i",
-           "--rm",
-           "-e", "FREEAGENT_CLIENT_ID",
-           "-e", "FREEAGENT_CLIENT_SECRET",
-           "-e", "FREEAGENT_ACCESS_TOKEN",
-           "-e", "FREEAGENT_REFRESH_TOKEN",
-           "freeagent-mcp"
-         ],
-         "env": {
-           "FREEAGENT_CLIENT_ID": "your_client_id",
-           "FREEAGENT_CLIENT_SECRET": "your_client_secret",
-           "FREEAGENT_ACCESS_TOKEN": "your_access_token",
-           "FREEAGENT_REFRESH_TOKEN": "your_refresh_token"
-         }
-       }
-     }
-   }
-   ```
+The easiest way to run the server is to pull the pre-built image from [Docker Hub](https://hub.docker.com/r/eddgrant/freeagent-mcp). Add the following to your Claude Code MCP settings (`~/.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "freeagent": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e", "FREEAGENT_CLIENT_ID",
+        "-e", "FREEAGENT_CLIENT_SECRET",
+        "-e", "FREEAGENT_ACCESS_TOKEN",
+        "-e", "FREEAGENT_REFRESH_TOKEN",
+        "eddgrant/freeagent-mcp"
+      ],
+      "env": {
+        "FREEAGENT_CLIENT_ID": "your_client_id",
+        "FREEAGENT_CLIENT_SECRET": "your_client_secret",
+        "FREEAGENT_ACCESS_TOKEN": "your_access_token",
+        "FREEAGENT_REFRESH_TOKEN": "your_refresh_token"
+      }
+    }
+  }
+}
+```
+
+### Image tags
+
+The Docker Hub image uses the following tagging convention:
+
+| Tag | Description |
+|-----|-------------|
+| `latest` | Most recent build from `main` — always up to date |
+| `sha-<short>` | Immutable tag for a specific commit, useful for pinning a known-good version |
+| `pr-<number>` | Latest build from a pull request, for testing changes before they land on `main` |
+
+To pin to a specific version, replace `eddgrant/freeagent-mcp` with e.g. `eddgrant/freeagent-mcp:sha-d775a51` in the config above.
+
+### Building from source
+
+If you prefer to build the image yourself:
+
+```bash
+git clone https://github.com/eddgrant/freeagent-mcp.git
+cd freeagent-mcp
+docker build -t freeagent-mcp .
+```
+
+Then replace `eddgrant/freeagent-mcp` with `freeagent-mcp` in the MCP settings above.
 
 ## Tools Reference
 
