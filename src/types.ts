@@ -39,13 +39,41 @@ export interface TimeslipResponse {
     timeslip: Timeslip;
 }
 
+export interface ProjectAttributes {
+    contact: string;
+    name: string;
+    status: string;
+    budget: number;
+    budget_units: string;
+    currency: string;
+    uses_project_invoice_sequence: boolean;
+    contract_po_reference?: string;
+    hours_per_day?: number;
+    normal_billing_rate?: string;
+    billing_period?: string;
+    is_ir35?: boolean;
+    starts_on?: string;
+    ends_on?: string;
+    include_unbilled_time_in_profitability?: boolean;
+}
+
 export interface Project {
     url: string;
     name: string;
     contact: string;
     status: string;
     budget: number;
+    budget_units: string;
     currency: string;
+    uses_project_invoice_sequence: boolean;
+    contract_po_reference?: string;
+    hours_per_day?: number;
+    normal_billing_rate?: string;
+    billing_period?: string;
+    is_ir35?: boolean;
+    starts_on?: string;
+    ends_on?: string;
+    include_unbilled_time_in_profitability?: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -58,12 +86,22 @@ export interface ProjectResponse {
     project: Project;
 }
 
+export interface TaskAttributes {
+    name: string;
+    is_billable?: boolean;
+    status?: string;
+    billing_rate?: string;
+    billing_period?: string;
+}
+
 export interface Task {
     url: string;
     name: string;
     project: string;
     status: string;
     is_billable: boolean;
+    billing_rate?: string;
+    billing_period?: string;
     created_at: string;
     updated_at: string;
 }

@@ -4,6 +4,8 @@ import {
   validateTimeslipAttributes,
   validateInvoiceItemAttributes,
   validateInvoiceAttributes,
+  validateProjectAttributes,
+  validateTaskAttributes,
 } from '../validation.js';
 
 describe('validateId', () => {
@@ -98,6 +100,103 @@ describe('validateTimeslipAttributes', () => {
 
   it('rejects when a required field has wrong type', () => {
     expect(() => validateTimeslipAttributes({ ...validAttrs, hours: 7.5 })).toThrow('missing required fields');
+  });
+});
+
+describe('validateProjectAttributes', () => {
+  const validProject = {
+    contact: 'https://api.freeagent.com/v2/contacts/1',
+    name: 'Test Project',
+    status: 'Active',
+    budget: 0,
+    budget_units: 'Hours',
+    currency: 'GBP',
+    uses_project_invoice_sequence: false,
+  };
+
+  it('accepts valid attributes with all required fields', () => {
+    const result = validateProjectAttributes(validProject);
+    expect(result).toEqual(validProject);
+  });
+
+  it('includes optional fields when present', () => {
+    const result = validateProjectAttributes({
+      ...validProject,
+      hours_per_day: 7.5,
+      billing_period: 'day',
+      normal_billing_rate: '500',
+      is_ir35: false,
+      starts_on: '2026-03-01',
+      ends_on: '2026-12-31',
+      contract_po_reference: 'PO-123',
+      include_unbilled_time_in_profitability: true,
+    });
+    expect(result.hours_per_day).toBe(7.5);
+    expect(result.billing_period).toBe('day');
+    expect(result.normal_billing_rate).toBe('500');
+    expect(result.is_ir35).toBe(false);
+    expect(result.starts_on).toBe('2026-03-01');
+    expect(result.ends_on).toBe('2026-12-31');
+    expect(result.contract_po_reference).toBe('PO-123');
+    expect(result.include_unbilled_time_in_profitability).toBe(true);
+  });
+
+  it('rejects null input', () => {
+    expect(() => validateProjectAttributes(null)).toThrow('must be an object');
+  });
+
+  it('rejects when required string fields are missing', () => {
+    const { name, ...rest } = validProject;
+    expect(() => validateProjectAttributes(rest)).toThrow('contact, name, status, budget_units, and currency are required strings');
+  });
+
+  it('rejects when budget is missing', () => {
+    const { budget, ...rest } = validProject;
+    expect(() => validateProjectAttributes(rest)).toThrow('budget is required and must be a number');
+  });
+
+  it('rejects when uses_project_invoice_sequence is missing', () => {
+    const { uses_project_invoice_sequence, ...rest } = validProject;
+    expect(() => validateProjectAttributes(rest)).toThrow('uses_project_invoice_sequence is required and must be a boolean');
+  });
+});
+
+describe('validateTaskAttributes', () => {
+  const validTask = {
+    project: 'https://api.freeagent.com/v2/projects/1',
+    name: 'Development',
+  };
+
+  it('accepts valid attributes with required fields', () => {
+    const result = validateTaskAttributes(validTask);
+    expect(result.project).toBe(validTask.project);
+    expect(result.task.name).toBe(validTask.name);
+  });
+
+  it('includes optional fields when present', () => {
+    const result = validateTaskAttributes({
+      ...validTask,
+      is_billable: true,
+      status: 'Active',
+      billing_rate: '100',
+      billing_period: 'hour',
+    });
+    expect(result.task.is_billable).toBe(true);
+    expect(result.task.status).toBe('Active');
+    expect(result.task.billing_rate).toBe('100');
+    expect(result.task.billing_period).toBe('hour');
+  });
+
+  it('rejects null input', () => {
+    expect(() => validateTaskAttributes(null)).toThrow('must be an object');
+  });
+
+  it('rejects when project is missing', () => {
+    expect(() => validateTaskAttributes({ name: 'Task' })).toThrow('project is required');
+  });
+
+  it('rejects when name is missing', () => {
+    expect(() => validateTaskAttributes({ project: 'url' })).toThrow('name is required');
   });
 });
 

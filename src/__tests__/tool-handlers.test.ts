@@ -15,7 +15,9 @@ function createMockClient(): FreeAgentClient {
     deleteTimeslip: vi.fn(),
     startTimer: vi.fn(),
     stopTimer: vi.fn(),
+    createProject: vi.fn(),
     listProjects: vi.fn(),
+    createTask: vi.fn(),
     listTasks: vi.fn(),
     listUsers: vi.fn(),
     getCurrentUser: vi.fn(),
@@ -88,6 +90,67 @@ describe('list_projects', () => {
     const result = await callTool('list_projects', { view: 'active' });
 
     expect(parseResult(result)).toEqual(projects);
+  });
+});
+
+describe('create_project', () => {
+  const validProject = {
+    contact: 'https://api.freeagent.com/v2/contacts/1',
+    name: 'Test Project',
+    status: 'Active',
+    budget: 0,
+    budget_units: 'Hours',
+    currency: 'GBP',
+    uses_project_invoice_sequence: false,
+  };
+
+  it('validates attributes and calls client', async () => {
+    const project = { url: 'https://api.freeagent.com/v2/projects/1', ...validProject };
+    vi.mocked(mockFaClient.createProject).mockResolvedValue(project as any);
+
+    const result = await callTool('create_project', validProject);
+
+    expect(mockFaClient.createProject).toHaveBeenCalled();
+    expect(parseResult(result)).toEqual(project);
+  });
+
+  it('returns error for invalid attributes', async () => {
+    const result = await callTool('create_project', { name: 'Test' });
+
+    expect(result.isError).toBe(true);
+    expect((result.content as any)[0].text).toContain('required');
+  });
+});
+
+describe('create_task', () => {
+  it('validates attributes and calls client', async () => {
+    const task = { url: 'https://api.freeagent.com/v2/tasks/1', name: 'Development' };
+    vi.mocked(mockFaClient.createTask).mockResolvedValue(task as any);
+
+    const result = await callTool('create_task', {
+      project: 'https://api.freeagent.com/v2/projects/1',
+      name: 'Development',
+    });
+
+    expect(mockFaClient.createTask).toHaveBeenCalledWith(
+      'https://api.freeagent.com/v2/projects/1',
+      { name: 'Development' },
+    );
+    expect(parseResult(result)).toEqual(task);
+  });
+
+  it('returns error when project is missing', async () => {
+    const result = await callTool('create_task', { name: 'Task' });
+
+    expect(result.isError).toBe(true);
+    expect((result.content as any)[0].text).toContain('project is required');
+  });
+
+  it('returns error when name is missing', async () => {
+    const result = await callTool('create_task', { project: 'url' });
+
+    expect(result.isError).toBe(true);
+    expect((result.content as any)[0].text).toContain('name is required');
   });
 });
 
