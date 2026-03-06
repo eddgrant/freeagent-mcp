@@ -23,7 +23,9 @@ Forked from [markpitt/freeagent-mcp](https://github.com/markpitt/freeagent-mcp).
 - "Mark the draft invoice as sent"
 - "Show me all overdue invoices"
 
-### Projects & Users
+### Projects & Tasks
+- "Set up a new project for Client Foo with a day rate of £123"
+- "Create a billable task called 'Consultancy' on the Foo project"
 - "List my active projects"
 - "What tasks are available on the Consulting project?"
 - "Who is the current authenticated user?"
@@ -115,7 +117,9 @@ Then replace `eddgrant/freeagent-mcp` with `freeagent-mcp` in the MCP settings a
 | `delete_invoice`        | Delete an invoice (requires confirmation for non-draft invoices)           |
 | `mark_invoice_as_draft` | Transition a sent invoice back to draft status                             |
 | `mark_invoice_as_sent`  | Transition a draft invoice to sent status                                  |
+| `create_project`        | Create a new project                                                       |
 | `list_projects`         | List projects with optional status filter                                  |
+| `create_task`           | Create a new task for a project                                            |
 | `list_tasks`            | List tasks, optionally filtered by project                                 |
 | `list_users`            | List users in the organisation                                             |
 | `get_current_user`      | Get the currently authenticated user                                       |
