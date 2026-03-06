@@ -9,8 +9,8 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { FreeAgentClient } from './freeagent-client.js';
-import { TimeslipAttributes, InvoiceAttributes } from './types.js';
-import { validateId, validateTimeslipAttributes, validateInvoiceItemAttributes, validateInvoiceAttributes } from './validation.js';
+import { TimeslipAttributes, InvoiceAttributes, ProjectAttributes } from './types.js';
+import { validateId, validateTimeslipAttributes, validateInvoiceItemAttributes, validateInvoiceAttributes, validateProjectAttributes, validateTaskAttributes } from './validation.js';
 
 export class FreeAgentServer {
   private server: Server;
@@ -175,6 +175,67 @@ export class FreeAgentServer {
               sort: { type: 'string', description: 'Sort order' },
               contact: { type: 'string', description: 'Filter by contact URL' }
             }
+          }
+        },
+        {
+          name: 'create_project',
+          description: 'Create a new project',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              contact: { type: 'string', description: 'Contact URL' },
+              name: { type: 'string', description: 'Project name' },
+              status: {
+                type: 'string',
+                enum: ['Active', 'Completed', 'Cancelled', 'Hidden'],
+                description: 'Project status'
+              },
+              budget: { type: 'number', description: 'Budget amount (use 0 if no budget)' },
+              budget_units: {
+                type: 'string',
+                enum: ['Hours', 'Days', 'Monetary'],
+                description: 'Budget units'
+              },
+              currency: { type: 'string', description: 'Currency code (e.g. "GBP", "USD")' },
+              uses_project_invoice_sequence: { type: 'boolean', description: 'Use project-level invoice sequence' },
+              contract_po_reference: { type: 'string', description: 'Contract/PO reference' },
+              hours_per_day: { type: 'number', description: 'Hours per day (e.g. 7.5)' },
+              normal_billing_rate: { type: 'string', description: 'Normal billing rate' },
+              billing_period: {
+                type: 'string',
+                enum: ['hour', 'day'],
+                description: 'Billing period'
+              },
+              is_ir35: { type: 'boolean', description: 'IR35 employment status' },
+              starts_on: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
+              ends_on: { type: 'string', description: 'End date (YYYY-MM-DD)' },
+              include_unbilled_time_in_profitability: { type: 'boolean', description: 'Include unbilled time in profitability' }
+            },
+            required: ['contact', 'name', 'status', 'budget', 'budget_units', 'currency', 'uses_project_invoice_sequence']
+          }
+        },
+        {
+          name: 'create_task',
+          description: 'Create a new task for a project',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              project: { type: 'string', description: 'Project URL' },
+              name: { type: 'string', description: 'Task name' },
+              is_billable: { type: 'boolean', description: 'Whether the task is billable' },
+              status: {
+                type: 'string',
+                enum: ['Active', 'Completed', 'Hidden'],
+                description: 'Task status'
+              },
+              billing_rate: { type: 'string', description: 'Billing rate' },
+              billing_period: {
+                type: 'string',
+                enum: ['hour', 'day'],
+                description: 'Billing period'
+              }
+            },
+            required: ['project', 'name']
           }
         },
         {
@@ -468,6 +529,22 @@ export class FreeAgentServer {
             const projects = await this.client.listProjects(request.params.arguments as any);
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(projects, null, 2) }]
+            };
+          }
+
+          case 'create_project': {
+            const projectAttrs = validateProjectAttributes(request.params.arguments);
+            const project = await this.client.createProject(projectAttrs);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(project, null, 2) }]
+            };
+          }
+
+          case 'create_task': {
+            const { project: projectUrl, task: taskAttrs } = validateTaskAttributes(request.params.arguments);
+            const task = await this.client.createTask(projectUrl, taskAttrs);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(task, null, 2) }]
             };
           }
 

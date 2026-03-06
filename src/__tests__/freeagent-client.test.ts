@@ -144,6 +144,32 @@ describe('stopTimer', () => {
   });
 });
 
+describe('createProject', () => {
+  it('calls POST /projects with wrapped body and unwraps response', async () => {
+    const attrs = {
+      contact: 'https://api.freeagent.com/v2/contacts/1',
+      name: 'Test Project',
+      status: 'Active',
+      budget: 0,
+      budget_units: 'Hours',
+      currency: 'GBP',
+      uses_project_invoice_sequence: false,
+    };
+    const project = { url: 'https://api.freeagent.com/v2/projects/1', ...attrs };
+    mockPost.mockResolvedValue({ data: { project } });
+
+    const result = await client.createProject(attrs);
+
+    expect(mockPost).toHaveBeenCalledWith('/projects', { project: attrs });
+    expect(result).toEqual(project);
+  });
+
+  it('re-throws on API error', async () => {
+    mockPost.mockRejectedValue(new Error('Validation error'));
+    await expect(client.createProject({} as any)).rejects.toThrow('Validation error');
+  });
+});
+
 describe('listProjects', () => {
   it('calls GET /projects with params and unwraps response', async () => {
     const projects = [{ url: 'https://api.freeagent.com/v2/projects/1' }];
@@ -153,6 +179,25 @@ describe('listProjects', () => {
 
     expect(mockGet).toHaveBeenCalledWith('/projects', { params: { view: 'active' } });
     expect(result).toEqual(projects);
+  });
+});
+
+describe('createTask', () => {
+  it('calls POST /tasks with project as query param and wrapped body', async () => {
+    const taskAttrs = { name: 'Development' };
+    const projectUrl = 'https://api.freeagent.com/v2/projects/1';
+    const task = { url: 'https://api.freeagent.com/v2/tasks/1', ...taskAttrs };
+    mockPost.mockResolvedValue({ data: { task } });
+
+    const result = await client.createTask(projectUrl, taskAttrs);
+
+    expect(mockPost).toHaveBeenCalledWith('/tasks', { task: taskAttrs }, { params: { project: projectUrl } });
+    expect(result).toEqual(task);
+  });
+
+  it('re-throws on API error', async () => {
+    mockPost.mockRejectedValue(new Error('Validation error'));
+    await expect(client.createTask('url', {} as any)).rejects.toThrow('Validation error');
   });
 });
 

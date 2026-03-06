@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectsResponse, Task, TasksResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse, InvoicePdfResponse } from './types.js';
+import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectAttributes, ProjectsResponse, ProjectResponse, Task, TaskAttributes, TasksResponse, TaskResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse, InvoicePdfResponse } from './types.js';
 
 export class FreeAgentClient {
     private axiosInstance: AxiosInstance;
@@ -154,6 +154,19 @@ export class FreeAgentClient {
         }
     }
 
+    async createProject(project: ProjectAttributes): Promise<Project> {
+        try {
+            console.error('[API] Creating project:', project);
+            const response = await this.axiosInstance.post<ProjectResponse>('/projects', {
+                project
+            });
+            return response.data.project;
+        } catch (error: any) {
+            console.error('[API] Failed to create project:', error.message);
+            throw error;
+        }
+    }
+
     async listProjects(params?: {
         view?: string;
         sort?: string;
@@ -165,6 +178,21 @@ export class FreeAgentClient {
             return response.data.projects;
         } catch (error: any) {
             console.error('[API] Failed to fetch projects:', error.message);
+            throw error;
+        }
+    }
+
+    async createTask(projectUrl: string, task: TaskAttributes): Promise<Task> {
+        try {
+            console.error('[API] Creating task:', task, 'for project:', projectUrl);
+            const response = await this.axiosInstance.post<TaskResponse>('/tasks', {
+                task
+            }, {
+                params: { project: projectUrl }
+            });
+            return response.data.task;
+        } catch (error: any) {
+            console.error('[API] Failed to create task:', error.message);
             throw error;
         }
     }

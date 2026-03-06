@@ -1,4 +1,4 @@
-import { TimeslipAttributes, InvoiceAttributes } from './types.js';
+import { TimeslipAttributes, InvoiceAttributes, ProjectAttributes, TaskAttributes } from './types.js';
 
 export function validateTimeslipAttributes(data: unknown): TimeslipAttributes {
   if (typeof data !== 'object' || !data) {
@@ -31,6 +31,78 @@ export function validateId(id: unknown): string {
     throw new Error('Invalid ID: must be a numeric string');
   }
   return id;
+}
+
+export function validateProjectAttributes(data: unknown): ProjectAttributes {
+  if (typeof data !== 'object' || !data) {
+    throw new Error('Invalid project data: must be an object');
+  }
+
+  const attrs = data as Record<string, unknown>;
+
+  if (typeof attrs.contact !== 'string' ||
+    typeof attrs.name !== 'string' ||
+    typeof attrs.status !== 'string' ||
+    typeof attrs.budget_units !== 'string' ||
+    typeof attrs.currency !== 'string') {
+    throw new Error('Invalid project data: contact, name, status, budget_units, and currency are required strings');
+  }
+
+  if (typeof attrs.budget !== 'number') {
+    throw new Error('Invalid project data: budget is required and must be a number');
+  }
+
+  if (typeof attrs.uses_project_invoice_sequence !== 'boolean') {
+    throw new Error('Invalid project data: uses_project_invoice_sequence is required and must be a boolean');
+  }
+
+  const project: ProjectAttributes = {
+    contact: attrs.contact,
+    name: attrs.name,
+    status: attrs.status,
+    budget: attrs.budget,
+    budget_units: attrs.budget_units,
+    currency: attrs.currency,
+    uses_project_invoice_sequence: attrs.uses_project_invoice_sequence,
+  };
+
+  if (typeof attrs.contract_po_reference === 'string') project.contract_po_reference = attrs.contract_po_reference;
+  if (typeof attrs.hours_per_day === 'number') project.hours_per_day = attrs.hours_per_day;
+  if (typeof attrs.normal_billing_rate === 'string') project.normal_billing_rate = attrs.normal_billing_rate;
+  if (typeof attrs.billing_period === 'string') project.billing_period = attrs.billing_period;
+  if (typeof attrs.is_ir35 === 'boolean') project.is_ir35 = attrs.is_ir35;
+  if (typeof attrs.starts_on === 'string') project.starts_on = attrs.starts_on;
+  if (typeof attrs.ends_on === 'string') project.ends_on = attrs.ends_on;
+  if (typeof attrs.include_unbilled_time_in_profitability === 'boolean') project.include_unbilled_time_in_profitability = attrs.include_unbilled_time_in_profitability;
+
+  return project;
+}
+
+export function validateTaskAttributes(data: unknown): { project: string; task: TaskAttributes } {
+  if (typeof data !== 'object' || !data) {
+    throw new Error('Invalid task data: must be an object');
+  }
+
+  const attrs = data as Record<string, unknown>;
+
+  if (typeof attrs.project !== 'string') {
+    throw new Error('Invalid task data: project is required');
+  }
+
+  if (typeof attrs.name !== 'string') {
+    throw new Error('Invalid task data: name is required');
+  }
+
+  const task: TaskAttributes = {
+    name: attrs.name,
+  };
+
+  if (typeof attrs.is_billable === 'boolean') task.is_billable = attrs.is_billable;
+  if (typeof attrs.status === 'string') task.status = attrs.status;
+  if (typeof attrs.billing_rate === 'string') task.billing_rate = attrs.billing_rate;
+  if (typeof attrs.billing_period === 'string') task.billing_period = attrs.billing_period;
+
+  return { project: attrs.project, task };
 }
 
 export function validateInvoiceItemAttributes(item: unknown, index: number): InvoiceAttributes['invoice_items'] extends (infer T)[] | undefined ? T : never {
