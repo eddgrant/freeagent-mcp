@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectAttributes, ProjectsResponse, ProjectResponse, Task, TaskAttributes, TasksResponse, TaskResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse, InvoicePdfResponse } from './types.js';
+import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectAttributes, ProjectsResponse, ProjectResponse, Task, TaskAttributes, TasksResponse, TaskResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse, InvoicePdfResponse, Category, CategoriesResponse, BankAccount, BankAccountsResponse, BankTransaction, BankTransactionsResponse, BankTransactionExplanation, BankTransactionExplanationsResponse, Bill, BillsResponse, BillResponse } from './types.js';
 
 export class FreeAgentClient {
     private axiosInstance: AxiosInstance;
@@ -321,6 +321,93 @@ export class FreeAgentClient {
             return response.data.invoice;
         } catch (error: any) {
             console.error('[API] Failed to mark invoice as draft:', error.message);
+            throw error;
+        }
+    }
+
+    async listCategories(params?: {
+        sub_accounts?: boolean;
+    }): Promise<CategoriesResponse> {
+        try {
+            console.error('[API] Fetching categories with params:', params);
+            const response = await this.axiosInstance.get<CategoriesResponse>('/categories', { params });
+            return response.data;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch categories:', error.message);
+            throw error;
+        }
+    }
+
+    async listBankAccounts(): Promise<BankAccount[]> {
+        try {
+            console.error('[API] Fetching bank accounts');
+            const response = await this.axiosInstance.get<BankAccountsResponse>('/bank_accounts');
+            return response.data.bank_accounts;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch bank accounts:', error.message);
+            throw error;
+        }
+    }
+
+    async listBankTransactions(params: {
+        bank_account: string;
+        from_date?: string;
+        to_date?: string;
+        updated_since?: string;
+        view?: 'all' | 'unexplained' | 'explained' | 'manual' | 'imported' | 'marked_for_review';
+    }): Promise<BankTransaction[]> {
+        try {
+            console.error('[API] Fetching bank transactions with params:', params);
+            const response = await this.axiosInstance.get<BankTransactionsResponse>('/bank_transactions', { params });
+            return response.data.bank_transactions;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch bank transactions:', error.message);
+            throw error;
+        }
+    }
+
+    async listBankTransactionExplanations(params: {
+        bank_account: string;
+        from_date?: string;
+        to_date?: string;
+        updated_since?: string;
+    }): Promise<BankTransactionExplanation[]> {
+        try {
+            console.error('[API] Fetching bank transaction explanations with params:', params);
+            const response = await this.axiosInstance.get<BankTransactionExplanationsResponse>('/bank_transaction_explanations', { params });
+            return response.data.bank_transaction_explanations;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch bank transaction explanations:', error.message);
+            throw error;
+        }
+    }
+
+    async listBills(params?: {
+        from_date?: string;
+        to_date?: string;
+        updated_since?: string;
+        contact?: string;
+        project?: string;
+        view?: 'all' | 'open' | 'overdue' | 'open_or_overdue' | 'paid' | 'recurring' | 'hire_purchase' | 'cis';
+        nested_bill_items?: boolean;
+    }): Promise<Bill[]> {
+        try {
+            console.error('[API] Fetching bills with params:', params);
+            const response = await this.axiosInstance.get<BillsResponse>('/bills', { params });
+            return response.data.bills;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch bills:', error.message);
+            throw error;
+        }
+    }
+
+    async getBill(id: string): Promise<Bill> {
+        try {
+            console.error('[API] Fetching bill:', id);
+            const response = await this.axiosInstance.get<BillResponse>(`/bills/${id}`);
+            return response.data.bill;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch bill:', error.message);
             throw error;
         }
     }

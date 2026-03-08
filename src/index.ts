@@ -423,6 +423,88 @@ export class FreeAgentServer {
           }
         },
         {
+          name: 'list_categories',
+          description: 'List FreeAgent categories (nominal codes) grouped by type: admin expenses, cost of sales, income, and general',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              sub_accounts: { type: 'boolean', description: 'Return sub-accounts instead of top-level accounts' }
+            }
+          }
+        },
+        {
+          name: 'list_bank_accounts',
+          description: 'List all bank accounts',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {}
+          }
+        },
+        {
+          name: 'list_bank_transactions',
+          description: 'List bank transactions for a given bank account, with optional date filtering',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              bank_account: { type: 'string', description: 'Bank account URL (required)' },
+              from_date: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
+              to_date: { type: 'string', description: 'End date (YYYY-MM-DD)' },
+              updated_since: { type: 'string', description: 'ISO datetime' },
+              view: {
+                type: 'string',
+                enum: ['all', 'unexplained', 'explained', 'manual', 'imported', 'marked_for_review'],
+                description: 'Filter view type'
+              }
+            },
+            required: ['bank_account']
+          }
+        },
+        {
+          name: 'list_bank_transaction_explanations',
+          description: 'List categorised bank transaction explanations for a bank account, with optional date filtering. Each explanation links to a category and shows the gross value.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              bank_account: { type: 'string', description: 'Bank account URL (required)' },
+              from_date: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
+              to_date: { type: 'string', description: 'End date (YYYY-MM-DD)' },
+              updated_since: { type: 'string', description: 'ISO datetime' }
+            },
+            required: ['bank_account']
+          }
+        },
+        {
+          name: 'list_bills',
+          description: 'List bills (supplier invoices) with optional filtering by date range, contact, project, and status',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              from_date: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
+              to_date: { type: 'string', description: 'End date (YYYY-MM-DD)' },
+              updated_since: { type: 'string', description: 'ISO datetime' },
+              contact: { type: 'string', description: 'Filter by contact/supplier URL' },
+              project: { type: 'string', description: 'Filter by project URL' },
+              view: {
+                type: 'string',
+                enum: ['all', 'open', 'overdue', 'open_or_overdue', 'paid', 'recurring', 'hire_purchase', 'cis'],
+                description: 'Filter by bill status'
+              },
+              nested_bill_items: { type: 'boolean', description: 'Include bill line items in response' }
+            }
+          }
+        },
+        {
+          name: 'get_bill',
+          description: 'Get a single bill by ID, including its line items and categories',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              id: { type: 'string', description: 'Bill ID' }
+            },
+            required: ['id']
+          }
+        },
+        {
           name: 'create_timeslips',
           description: 'Batch create multiple timeslips at once',
           inputSchema: {
@@ -566,6 +648,70 @@ export class FreeAgentServer {
             const user = await this.client.getCurrentUser();
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(user, null, 2) }]
+            };
+          }
+
+          case 'list_categories': {
+            const params = request.params.arguments as { sub_accounts?: boolean } | undefined;
+            const categories = await this.client.listCategories(params);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(categories, null, 2) }]
+            };
+          }
+
+          case 'list_bank_accounts': {
+            const bankAccounts = await this.client.listBankAccounts();
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(bankAccounts, null, 2) }]
+            };
+          }
+
+          case 'list_bank_transactions': {
+            const params = request.params.arguments as {
+              bank_account: string;
+              from_date?: string;
+              to_date?: string;
+              updated_since?: string;
+              view?: 'all' | 'unexplained' | 'explained' | 'manual' | 'imported' | 'marked_for_review';
+            };
+            if (typeof params.bank_account !== 'string') {
+              throw new Error('bank_account is required');
+            }
+            const transactions = await this.client.listBankTransactions(params);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(transactions, null, 2) }]
+            };
+          }
+
+          case 'list_bank_transaction_explanations': {
+            const params = request.params.arguments as {
+              bank_account: string;
+              from_date?: string;
+              to_date?: string;
+              updated_since?: string;
+            };
+            if (typeof params.bank_account !== 'string') {
+              throw new Error('bank_account is required');
+            }
+            const explanations = await this.client.listBankTransactionExplanations(params);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(explanations, null, 2) }]
+            };
+          }
+
+          case 'list_bills': {
+            const bills = await this.client.listBills(request.params.arguments as any);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(bills, null, 2) }]
+            };
+          }
+
+          case 'get_bill': {
+            const { id: rawId } = request.params.arguments as { id: string };
+            const id = validateId(rawId);
+            const bill = await this.client.getBill(id);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(bill, null, 2) }]
             };
           }
 
