@@ -197,6 +197,148 @@ export interface InvoicePdfResponse {
     pdf: { content: string };
 }
 
+export interface Category {
+    url: string;
+    description: string;
+    nominal_code: string;
+    group_description?: string;
+    allowable_for_tax?: boolean;
+    tax_reporting_name?: string;
+    auto_sales_tax_rate?: string;
+}
+
+export interface CategoriesResponse {
+    admin_expenses_categories: Category[];
+    cost_of_sales_categories: Category[];
+    income_categories: Category[];
+    general_categories: Category[];
+}
+
+export interface BankAccount {
+    url: string;
+    name: string;
+    type: string;
+    currency: string;
+    opening_balance: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface BankAccountsResponse {
+    bank_accounts: BankAccount[];
+}
+
+export interface BankTransaction {
+    url: string;
+    amount: string;
+    bank_account: string;
+    dated_on: string;
+    description: string;
+    full_description?: string;
+    unexplained_amount: string;
+    is_manual: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface BankTransactionsResponse {
+    bank_transactions: BankTransaction[];
+}
+
+export interface BankTransactionExplanation {
+    url: string;
+    bank_account?: string;
+    bank_transaction?: string;
+    type?: string;
+    dated_on: string;
+    description?: string;
+    gross_value: string;
+    category?: string;
+    sales_tax_rate?: string;
+    sales_tax_value?: string;
+    ec_status?: string;
+    is_deletable?: boolean;
+    is_locked?: boolean;
+    paid_invoice?: string;
+    paid_bill?: string;
+    paid_user?: string;
+    project?: string;
+    rebill_type?: string;
+    rebill_factor?: string;
+    transfer_bank_account?: string;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface BankTransactionExplanationsResponse {
+    bank_transaction_explanations: BankTransactionExplanation[];
+}
+
+export interface BillItemAttributes {
+    category: string;
+    description: string;
+    total_value: string;
+    total_value_ex_tax?: string;
+    quantity?: string;
+    unit?: string;
+    sales_tax_rate?: string;
+    sales_tax_status?: string;
+}
+
+export interface BillItem {
+    url: string;
+    bill: string;
+    category: string;
+    description: string;
+    total_value: string;
+    total_value_ex_tax?: string;
+    quantity?: string;
+    unit?: string;
+    sales_tax_rate?: string;
+    sales_tax_status?: string;
+}
+
+export interface BillAttributes {
+    contact: string;
+    reference: string;
+    dated_on: string;
+    due_on: string;
+    comments?: string;
+    category?: string;
+    bill_items?: BillItemAttributes[];
+}
+
+export interface Bill {
+    url: string;
+    contact: string;
+    reference: string;
+    dated_on: string;
+    due_on: string;
+    paid_on?: string;
+    status: string;
+    long_status?: string;
+    currency: string;
+    total_value: string;
+    due_value: string;
+    net_value?: string;
+    sales_tax_value?: string;
+    comments?: string;
+    project?: string;
+    recurring?: boolean;
+    bill_items?: BillItem[];
+    created_at: string;
+    updated_at: string;
+}
+
+export interface BillsResponse {
+    bills: Bill[];
+}
+
+export interface BillResponse {
+    bill: Bill;
+}
+
 export interface FreeAgentConfig {
     clientId: string;
     clientSecret: string;

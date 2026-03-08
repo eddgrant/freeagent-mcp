@@ -23,6 +23,13 @@ Forked from [markpitt/freeagent-mcp](https://github.com/markpitt/freeagent-mcp).
 - "Mark the draft invoice as sent"
 - "Show me all overdue invoices"
 
+### Bills, Bank Transactions & Categories
+- "Show me all bills from January to March"
+- "What categories have I spent money in this year?"
+- "List my bank transactions for March"
+- "Show me the categorised breakdown of outgoings for my current account"
+- "What are my FreeAgent nominal categories?"
+
 ### Projects & Tasks
 - "Set up a new project for Client Foo with a day rate of £123"
 - "Create a billable task called 'Consultancy' on the Foo project"
@@ -99,30 +106,36 @@ Then replace `eddgrant/freeagent-mcp` with `freeagent-mcp` in the MCP settings a
 
 ## Tools Reference
 
-| Tool                    | Description                                                                |
-|-------------------------|----------------------------------------------------------------------------|
-| `list_timeslips`        | List timeslips with optional date, project, task, user, and status filters |
-| `get_timeslip`          | Get a single timeslip by ID                                                |
-| `create_timeslip`       | Create a new timeslip                                                      |
-| `create_timeslips`      | Batch create multiple timeslips (with deduplication)                       |
-| `update_timeslip`       | Update an existing timeslip                                                |
-| `delete_timeslip`       | Delete a timeslip                                                          |
-| `start_timer`           | Start a timer on a timeslip                                                |
-| `stop_timer`            | Stop a running timer                                                       |
-| `create_invoice`        | Create an invoice, optionally attaching unbilled timeslips                 |
-| `update_invoice`        | Update invoice fields or line item descriptions                            |
-| `list_invoices`         | List invoices with optional filters                                        |
-| `get_invoice`           | Get a single invoice by ID                                                 |
-| `download_invoice_pdf`  | Download an invoice as base64-encoded PDF                                  |
-| `delete_invoice`        | Delete an invoice (requires confirmation for non-draft invoices)           |
-| `mark_invoice_as_draft` | Transition a sent invoice back to draft status                             |
-| `mark_invoice_as_sent`  | Transition a draft invoice to sent status                                  |
-| `create_project`        | Create a new project                                                       |
-| `list_projects`         | List projects with optional status filter                                  |
-| `create_task`           | Create a new task for a project                                            |
-| `list_tasks`            | List tasks, optionally filtered by project                                 |
-| `list_users`            | List users in the organisation                                             |
-| `get_current_user`      | Get the currently authenticated user                                       |
+| Tool                                 | Description                                                                           |
+|--------------------------------------|---------------------------------------------------------------------------------------|
+| `list_timeslips`                     | List timeslips with optional date, project, task, user, and status filters            |
+| `get_timeslip`                       | Get a single timeslip by ID                                                           |
+| `create_timeslip`                    | Create a new timeslip                                                                 |
+| `create_timeslips`                   | Batch create multiple timeslips (with deduplication)                                  |
+| `update_timeslip`                    | Update an existing timeslip                                                           |
+| `delete_timeslip`                    | Delete a timeslip                                                                     |
+| `start_timer`                        | Start a timer on a timeslip                                                           |
+| `stop_timer`                         | Stop a running timer                                                                  |
+| `create_invoice`                     | Create an invoice, optionally attaching unbilled timeslips                            |
+| `update_invoice`                     | Update invoice fields or line item descriptions                                       |
+| `list_invoices`                      | List invoices with optional filters                                                   |
+| `get_invoice`                        | Get a single invoice by ID                                                            |
+| `download_invoice_pdf`               | Download an invoice as base64-encoded PDF                                             |
+| `delete_invoice`                     | Delete an invoice (requires confirmation for non-draft invoices)                      |
+| `mark_invoice_as_draft`              | Transition a sent invoice back to draft status                                        |
+| `mark_invoice_as_sent`               | Transition a draft invoice to sent status                                             |
+| `list_categories`                    | List FreeAgent categories (nominal codes) grouped by type                             |
+| `list_bank_accounts`                 | List all bank accounts                                                                |
+| `list_bank_transactions`             | List bank transactions for a bank account with optional date filtering                |
+| `list_bank_transaction_explanations` | List categorised bank transaction explanations with optional date filtering            |
+| `list_bills`                         | List bills (supplier invoices) with optional date, contact, project, and status filter |
+| `get_bill`                           | Get a single bill by ID, including line items and categories                           |
+| `create_project`                     | Create a new project                                                                  |
+| `list_projects`                      | List projects with optional status filter                                             |
+| `create_task`                        | Create a new task for a project                                                       |
+| `list_tasks`                         | List tasks, optionally filtered by project                                            |
+| `list_users`                         | List users in the organisation                                                        |
+| `get_current_user`                   | Get the currently authenticated user                                                  |
 
 ## Development
 
