@@ -324,6 +324,34 @@ describe('markInvoiceAsDraft', () => {
   });
 });
 
+describe('getProfitAndLossSummary', () => {
+  it('calls GET /accounting/profit_and_loss/summary with params', async () => {
+    const summary = {
+      from: '2026-03-01',
+      to: '2026-03-31',
+      income: '15000',
+      expenses: '3000',
+      operating_profit: '12000',
+      less: [],
+      retained_profit: '12000',
+      retained_profit_brought_forward: '50000',
+      retained_profit_carried_forward: '62000',
+    };
+    mockGet.mockResolvedValue({ data: { profit_and_loss_summary: summary } });
+
+    const params = { from_date: '2026-03-01', to_date: '2026-03-31' };
+    const result = await client.getProfitAndLossSummary(params);
+
+    expect(mockGet).toHaveBeenCalledWith('/accounting/profit_and_loss/summary', { params });
+    expect(result).toEqual(summary);
+  });
+
+  it('re-throws on API error', async () => {
+    mockGet.mockRejectedValue(new Error('Forbidden'));
+    await expect(client.getProfitAndLossSummary()).rejects.toThrow('Forbidden');
+  });
+});
+
 describe('markInvoiceAsSent', () => {
   it('calls PUT on transitions/mark_as_sent endpoint', async () => {
     const invoice = { url: 'https://api.freeagent.com/v2/invoices/42' };

@@ -326,7 +326,8 @@ export class FreeAgentServer {
                 enum: ['recent_open_or_overdue', 'open_or_overdue', 'draft', 'scheduled_to_email', 'thank_you_emails', 'reminders', 'overdue'],
                 description: 'Filter view type'
               },
-              sort: { type: 'string', description: 'Sort order' }
+              sort: { type: 'string', description: 'Sort order' },
+              updated_since: { type: 'string', description: 'Only return invoices updated after this ISO datetime (e.g. 2026-03-01T00:00:00.000Z)' }
             }
           }
         },
@@ -502,6 +503,18 @@ export class FreeAgentServer {
               id: { type: 'string', description: 'Bill ID' }
             },
             required: ['id']
+          }
+        },
+        {
+          name: 'get_profit_and_loss_summary',
+          description: 'Get a profit and loss summary for a given period. Returns income, expenses, operating profit, deductions, and retained profit. The requested period must be 12 months or less, or contained within a single accounting year.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              from_date: { type: 'string', description: 'Period start date (YYYY-MM-DD). Defaults to accounting year start if omitted.' },
+              to_date: { type: 'string', description: 'Period end date (YYYY-MM-DD). Defaults to today if omitted.' },
+              accounting_period: { type: 'string', description: 'Accounting period in YYYY/YY format (e.g. "2025/26"). Alternative to from_date/to_date.' }
+            }
           }
         },
         {
@@ -849,6 +862,18 @@ export class FreeAgentServer {
             const invoice = await this.client.markInvoiceAsSent(id);
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(invoice, null, 2) }]
+            };
+          }
+
+          case 'get_profit_and_loss_summary': {
+            const params = request.params.arguments as {
+              from_date?: string;
+              to_date?: string;
+              accounting_period?: string;
+            } | undefined;
+            const summary = await this.client.getProfitAndLossSummary(params);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(summary, null, 2) }]
             };
           }
 
