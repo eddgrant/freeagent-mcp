@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectAttributes, ProjectsResponse, ProjectResponse, Task, TaskAttributes, TasksResponse, TaskResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse, InvoicePdfResponse, Category, CategoriesResponse, BankAccount, BankAccountsResponse, BankTransaction, BankTransactionsResponse, BankTransactionExplanation, BankTransactionExplanationsResponse, Bill, BillsResponse, BillResponse } from './types.js';
+import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectAttributes, ProjectsResponse, ProjectResponse, Task, TaskAttributes, TasksResponse, TaskResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse, InvoicePdfResponse, Category, CategoriesResponse, BankAccount, BankAccountsResponse, BankTransaction, BankTransactionsResponse, BankTransactionExplanation, BankTransactionExplanationsResponse, Bill, BillsResponse, BillResponse, ProfitAndLossSummary, ProfitAndLossSummaryResponse } from './types.js';
 
 export class FreeAgentClient {
     private axiosInstance: AxiosInstance;
@@ -254,6 +254,7 @@ export class FreeAgentClient {
         contact?: string;
         view?: string;
         sort?: string;
+        updated_since?: string;
     }): Promise<Invoice[]> {
         try {
             console.error('[API] Fetching invoices with params:', params);
@@ -408,6 +409,21 @@ export class FreeAgentClient {
             return response.data.bill;
         } catch (error: any) {
             console.error('[API] Failed to fetch bill:', error.message);
+            throw error;
+        }
+    }
+
+    async getProfitAndLossSummary(params?: {
+        from_date?: string;
+        to_date?: string;
+        accounting_period?: string;
+    }): Promise<ProfitAndLossSummary> {
+        try {
+            console.error('[API] Fetching profit and loss summary with params:', params);
+            const response = await this.axiosInstance.get<ProfitAndLossSummaryResponse>('/accounting/profit_and_loss/summary', { params });
+            return response.data.profit_and_loss_summary;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch profit and loss summary:', error.message);
             throw error;
         }
     }

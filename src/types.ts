@@ -339,6 +339,27 @@ export interface BillResponse {
     bill: Bill;
 }
 
+export interface ProfitAndLossDeduction {
+    title: string;
+    total: string;
+}
+
+export interface ProfitAndLossSummary {
+    from: string;
+    to: string;
+    income: string;
+    expenses: string;
+    operating_profit: string;
+    less: ProfitAndLossDeduction[];
+    retained_profit: string;
+    retained_profit_brought_forward: string;
+    retained_profit_carried_forward: string;
+}
+
+export interface ProfitAndLossSummaryResponse {
+    profit_and_loss_summary: ProfitAndLossSummary;
+}
+
 export interface FreeAgentConfig {
     clientId: string;
     clientSecret: string;

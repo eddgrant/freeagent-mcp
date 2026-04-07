@@ -29,6 +29,13 @@ function createMockClient(): FreeAgentClient {
     deleteInvoice: vi.fn(),
     markInvoiceAsDraft: vi.fn(),
     markInvoiceAsSent: vi.fn(),
+    getProfitAndLossSummary: vi.fn(),
+    listCategories: vi.fn(),
+    listBankAccounts: vi.fn(),
+    listBankTransactions: vi.fn(),
+    listBankTransactionExplanations: vi.fn(),
+    listBills: vi.fn(),
+    getBill: vi.fn(),
   } as unknown as FreeAgentClient;
 }
 
@@ -487,6 +494,49 @@ describe('delete_invoice', () => {
 
     expect(mockFaClient.deleteInvoice).toHaveBeenCalledWith('42');
     expect((result.content as any)[0].text).toContain('deleted successfully');
+  });
+});
+
+// Profit and loss
+describe('get_profit_and_loss_summary', () => {
+  it('returns JSON-stringified client response', async () => {
+    const summary = {
+      from: '2026-03-01',
+      to: '2026-03-31',
+      income: '15000',
+      expenses: '3000',
+      operating_profit: '12000',
+      less: [],
+      retained_profit: '12000',
+      retained_profit_brought_forward: '50000',
+      retained_profit_carried_forward: '62000',
+    };
+    vi.mocked(mockFaClient.getProfitAndLossSummary).mockResolvedValue(summary as any);
+
+    const result = await callTool('get_profit_and_loss_summary', {
+      from_date: '2026-03-01',
+      to_date: '2026-03-31',
+    });
+
+    expect(mockFaClient.getProfitAndLossSummary).toHaveBeenCalledWith({
+      from_date: '2026-03-01',
+      to_date: '2026-03-31',
+    });
+    expect(parseResult(result)).toEqual(summary);
+  });
+
+  it('works with accounting_period param', async () => {
+    const summary = { from: '2025-04-01', to: '2026-03-31', income: '100000' };
+    vi.mocked(mockFaClient.getProfitAndLossSummary).mockResolvedValue(summary as any);
+
+    const result = await callTool('get_profit_and_loss_summary', {
+      accounting_period: '2025/26',
+    });
+
+    expect(mockFaClient.getProfitAndLossSummary).toHaveBeenCalledWith({
+      accounting_period: '2025/26',
+    });
+    expect(parseResult(result)).toEqual(summary);
   });
 });
 
