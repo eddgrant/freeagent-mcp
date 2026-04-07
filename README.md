@@ -4,6 +4,7 @@ An MCP server that lets AI assistants like Claude manage your FreeAgent accounti
 
 Forked from [markpitt/freeagent-mcp](https://github.com/markpitt/freeagent-mcp).
 
+[![Docker Image Version](https://img.shields.io/docker/v/eddgrant/freeagent-mcp/latest?label=Docker%20Hub)](https://hub.docker.com/r/eddgrant/freeagent-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > **Warning: This server can create, modify, and delete real financial data in your FreeAgent account, including invoices and timeslips. It has not been extensively tested and is provided as-is with no warranty. Use entirely at your own risk. The authors accept no responsibility for any data loss or unintended changes to your accounting records.**
