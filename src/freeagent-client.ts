@@ -167,6 +167,17 @@ export class FreeAgentClient {
         }
     }
 
+    async getProject(id: string): Promise<Project> {
+        try {
+            console.error('[API] Fetching project:', id);
+            const response = await this.axiosInstance.get<ProjectResponse>(`/projects/${id}`);
+            return response.data.project;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch project:', error.message);
+            throw error;
+        }
+    }
+
     async listProjects(params?: {
         view?: string;
         sort?: string;

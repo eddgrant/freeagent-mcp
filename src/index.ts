@@ -10,12 +10,13 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { FreeAgentClient } from './freeagent-client.js';
 import { TimeslipAttributes, InvoiceAttributes, ProjectAttributes } from './types.js';
-import { validateId, validateTimeslipAttributes, validateInvoiceItemAttributes, validateInvoiceAttributes, validateProjectAttributes, validateTaskAttributes, normaliseProjectIds } from './validation.js';
+import { validateId, validateTimeslipAttributes, validateInvoiceItemAttributes, validateInvoiceAttributes, validateProjectAttributes, validateTaskAttributes, normaliseProjectIds, normaliseNumberingSource, buildInvoicePayload, ORG_WIDE_NUMBERING } from './validation.js';
 import { installLifecycleHandlers } from './lifecycle.js';
 import {
   deriveImplicatedProjectUrls,
   findUnbilledTimeslipsForProjects,
   formatUnbilledRefusal,
+  formatNumberingRefusal,
 } from './invoice-timeslip-check.js';
 
 export class FreeAgentServer {
@@ -273,16 +274,19 @@ export class FreeAgentServer {
         },
         {
           name: 'create_invoice',
-          description: 'Create a new invoice. By default, refuses to create the invoice if unbilled timeslips exist on the implicated project(s) without explicit handling — pass include_timeslips to attach them, or omit_unbilled_timeslips: true to deliberately leave them unbilled. Supports invoices spanning multiple projects via project_ids.',
+          description: 'Create a new invoice spanning one or more projects. Refuses to create the invoice if (a) unbilled timeslips exist on any implicated project and the caller has not handled them explicitly (pass include_timeslips to attach them, or omit_unbilled_timeslips: true to leave them), or (b) more than one project on the invoice has its own per-project invoice sequence — in which case the caller must pick one via numbering_source.',
           inputSchema: {
             type: 'object' as const,
             properties: {
               contact: { type: 'string', description: 'Contact URL' },
-              project: { type: 'string', description: 'Primary project URL (optional)' },
               project_ids: {
                 type: 'array',
-                description: 'Multi-project: numeric project IDs to span across this invoice (URLs accepted but converted to IDs). The primary project (if set via `project`) is auto-included. Setting this lets include_timeslips pull timeslips from every listed project.',
+                description: 'Numeric project IDs that this invoice covers. Use a single-element array for a single-project invoice; multiple entries make this a multi-project invoice. URLs are accepted in entries and converted to IDs. Order does not matter.',
                 items: { type: 'string' }
+              },
+              numbering_source: {
+                type: 'string',
+                description: 'Which project\'s invoice sequence to draw the reference number from. Set to a project ID present in project_ids to use that project\'s per-project sequence, or to "org-wide" to use the organisation-wide sequence. For single-project invoices this defaults to that project. For multi-project invoices it is required if any project on the invoice has uses_project_invoice_sequence=true.'
               },
               dated_on: { type: 'string', description: 'Invoice date (YYYY-MM-DD)' },
               payment_terms_in_days: { type: 'number', description: 'Payment terms in days (default: 30)' },
@@ -356,7 +360,7 @@ export class FreeAgentServer {
         },
         {
           name: 'update_invoice',
-          description: 'Update an existing invoice. Use this to modify line item descriptions, payment terms, comments, or to extend an existing single-project invoice across additional projects via project_ids. When project_ids is set, the same detect-and-refuse safety check as create_invoice applies.',
+          description: 'Update an existing invoice. Use this to modify line item descriptions, payment terms, comments, or to extend an existing single-project invoice to span additional projects via project_ids. When project_ids is set, the same unbilled-timeslip safety check as create_invoice applies. The invoice\'s reference number cannot be changed via update — numbering_source is set at creation only.',
           inputSchema: {
             type: 'object' as const,
             properties: {
@@ -370,7 +374,7 @@ export class FreeAgentServer {
               },
               project_ids: {
                 type: 'array',
-                description: 'Multi-project: numeric project IDs to extend this invoice across (URLs accepted but converted to IDs). The invoice\'s existing primary project is auto-included.',
+                description: 'Numeric project IDs that this invoice should cover. Pass the full set (existing + extras); URLs accepted and converted to IDs. Order does not matter.',
                 items: { type: 'string' }
               },
               include_timeslips: {
@@ -833,27 +837,22 @@ export class FreeAgentServer {
               invoiceUpdates.invoice_items = updates.invoice_items.map((item, i) => validateInvoiceItemAttributes(item, i));
             }
             if (updates.project_ids !== undefined) {
-              // Fetch the existing invoice to auto-include its primary project ID.
-              const existing = await this.client.getInvoice(id);
-              invoiceUpdates.project_ids = normaliseProjectIds(updates.project_ids, existing.project);
+              const projectIds = normaliseProjectIds(updates.project_ids);
+              invoiceUpdates.project_ids = projectIds;
 
-              // Detect-and-refuse on update applies only when the caller is
+              // Detect-and-refuse on update applies when the caller is
               // extending project scope (project_ids set) without an active
-              // timeslip directive.
+              // timeslip directive. The numbering check is NOT applied on
+              // update — invoice references are immutable post-creation.
               const omitUnbilled = updates.omit_unbilled_timeslips === true;
-              if (!invoiceUpdates.include_timeslips && !omitUnbilled) {
-                const projectUrls = deriveImplicatedProjectUrls({
-                  existingProject: existing.project,
-                  projectIds: invoiceUpdates.project_ids,
-                });
-                if (projectUrls.length > 0) {
-                  const unbilled = await findUnbilledTimeslipsForProjects(this.client, projectUrls);
-                  if (unbilled.length > 0) {
-                    return {
-                      content: [{ type: 'text' as const, text: formatUnbilledRefusal(unbilled) }],
-                      isError: true,
-                    };
-                  }
+              if (!invoiceUpdates.include_timeslips && !omitUnbilled && projectIds.length > 0) {
+                const projectUrls = deriveImplicatedProjectUrls({ projectIds });
+                const unbilled = await findUnbilledTimeslipsForProjects(this.client, projectUrls);
+                if (unbilled.length > 0) {
+                  return {
+                    content: [{ type: 'text' as const, text: formatUnbilledRefusal(unbilled) }],
+                    isError: true,
+                  };
                 }
               }
             }
@@ -866,29 +865,40 @@ export class FreeAgentServer {
 
           case 'create_invoice': {
             const args = request.params.arguments as Record<string, unknown>;
-            const invoiceAttrs = validateInvoiceAttributes(args);
+            const input = validateInvoiceAttributes(args);
             const omitUnbilled = args.omit_unbilled_timeslips === true;
+            const projectIds = input.project_ids ?? [];
 
-            // Detect-and-refuse: if the caller didn't explicitly include or
-            // omit timeslips, check whether unbilled time exists on the
-            // implicated project(s) and bail out with a clear next-step menu.
-            if (!invoiceAttrs.include_timeslips && !omitUnbilled) {
-              const projectUrls = deriveImplicatedProjectUrls({
-                project: invoiceAttrs.project,
-                projectIds: invoiceAttrs.project_ids,
-              });
-              if (projectUrls.length > 0) {
-                const unbilled = await findUnbilledTimeslipsForProjects(this.client, projectUrls);
-                if (unbilled.length > 0) {
-                  return {
-                    content: [{ type: 'text' as const, text: formatUnbilledRefusal(unbilled) }],
-                    isError: true,
-                  };
-                }
+            // Detect-and-refuse #1: unbilled timeslips on the implicated
+            // project(s). Skipped when the caller has made an active choice
+            // via include_timeslips or omit_unbilled_timeslips.
+            if (!input.include_timeslips && !omitUnbilled && projectIds.length > 0) {
+              const projectUrls = deriveImplicatedProjectUrls({ projectIds });
+              const unbilled = await findUnbilledTimeslipsForProjects(this.client, projectUrls);
+              if (unbilled.length > 0) {
+                return {
+                  content: [{ type: 'text' as const, text: formatUnbilledRefusal(unbilled) }],
+                  isError: true,
+                };
               }
             }
 
-            const invoice = await this.client.createInvoice(invoiceAttrs);
+            // Detect-and-refuse #2: ambiguous numbering source. Multi-project
+            // invoices must specify which project (or "org-wide") supplies
+            // the invoice reference number, since FreeAgent picks silently
+            // otherwise. We don't pre-inspect projects' sequence settings —
+            // the user knows their own setup, and FreeAgent falls back to
+            // org-wide for any chosen project that does not have its own
+            // sequence configured.
+            if (projectIds.length > 1 && !input.numbering_source) {
+              return {
+                content: [{ type: 'text' as const, text: formatNumberingRefusal(projectIds) }],
+                isError: true,
+              };
+            }
+
+            const wire = buildInvoicePayload(input);
+            const invoice = await this.client.createInvoice(wire);
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(invoice, null, 2) }]
             };

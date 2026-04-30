@@ -25,7 +25,10 @@ Forked from [markpitt/freeagent-mcp](https://github.com/markpitt/freeagent-mcp).
 - "Mark the draft invoice as sent"
 - "Show me all overdue invoices"
 
-`create_invoice` and `update_invoice` refuse by default if the implicated project(s) have unbilled timeslips and you haven't told the tool what to do with them. Either pass `include_timeslips` (with a grouping mode) to attach them, or `omit_unbilled_timeslips: true` to leave them alone — this prevents accidentally invoicing a project while leaving billable time stranded. Multi-project invoices are supported via the `project_ids` field on both tools.
+`create_invoice` and `update_invoice` accept a `project_ids` array (numeric IDs or URLs) listing which projects the invoice covers. They refuse by default in two situations, surfacing a clear menu of next steps so the agent can ask you what to do:
+
+- The implicated project(s) have unbilled timeslips and you haven't told the tool what to do with them. Either pass `include_timeslips` (with a grouping mode) to attach them, or `omit_unbilled_timeslips: true` to leave them — this prevents accidentally invoicing a project while leaving billable time stranded.
+- The invoice spans multiple projects (`project_ids.length > 1`) and you haven't picked which project's invoice sequence the new invoice should be numbered from. Pass `numbering_source` set to one of the project IDs to use that project's per-project sequence (if it has one configured), or `"org-wide"` to use the organisation-wide sequence.
 
 ### Bills, Bank Transactions & Categories
 - "Show me all bills from January to March"
