@@ -16,7 +16,9 @@ import {
   deriveImplicatedProjectUrls,
   findUnbilledTimeslipsForProjects,
   formatUnbilledRefusal,
+  inspectProjectsForNumbering,
   formatNumberingRefusal,
+  formatNumberingPickIneligible,
 } from './invoice-timeslip-check.js';
 
 export class FreeAgentServer {
@@ -883,18 +885,30 @@ export class FreeAgentServer {
               }
             }
 
-            // Detect-and-refuse #2: ambiguous numbering source. Multi-project
-            // invoices must specify which project (or "org-wide") supplies
-            // the invoice reference number, since FreeAgent picks silently
-            // otherwise. We don't pre-inspect projects' sequence settings —
-            // the user knows their own setup, and FreeAgent falls back to
-            // org-wide for any chosen project that does not have its own
-            // sequence configured.
-            if (projectIds.length > 1 && !input.numbering_source) {
-              return {
-                content: [{ type: 'text' as const, text: formatNumberingRefusal(projectIds) }],
-                isError: true,
-              };
+            // Detect-and-refuse #2: numbering source. For multi-project
+            // invoices we inspect every project's per-project-sequence
+            // setting so we can either (a) refuse with an informative menu
+            // when numbering_source is unset, or (b) refuse explicitly when
+            // the caller has picked a project that has no per-project
+            // sequence configured (FreeAgent would silently fall back to
+            // org-wide in that case, surprising the user).
+            if (projectIds.length > 1) {
+              const candidates = await inspectProjectsForNumbering(this.client, projectIds);
+              if (!input.numbering_source) {
+                return {
+                  content: [{ type: 'text' as const, text: formatNumberingRefusal(candidates) }],
+                  isError: true,
+                };
+              }
+              if (input.numbering_source !== ORG_WIDE_NUMBERING) {
+                const picked = candidates.find(c => c.id === input.numbering_source);
+                if (picked && !picked.usesProjectInvoiceSequence) {
+                  return {
+                    content: [{ type: 'text' as const, text: formatNumberingPickIneligible(picked, candidates) }],
+                    isError: true,
+                  };
+                }
+              }
             }
 
             const wire = buildInvoicePayload(input);

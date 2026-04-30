@@ -73,7 +73,14 @@ describe('scenario: "create an invoice for projects X and Y"', () => {
         expect(text).toContain('omit_unbilled_timeslips: true');
     });
 
-    it('second call: agent retries with include_timeslips but no numbering_source — MCP refuses again with the numbering menu', async () => {
+    it('second call: agent retries with include_timeslips but no numbering_source — MCP inspects projects and refuses with a sequence-aware menu', async () => {
+        // Mock the project inspection: 100 has its own sequence, 200 doesn't.
+        vi.mocked(mockFaClient.getProject).mockImplementation(async (id: string) => {
+            if (id === '100') return { url: '...', name: 'Alpha', uses_project_invoice_sequence: true } as any;
+            if (id === '200') return { url: '...', name: 'Beta', uses_project_invoice_sequence: false } as any;
+            throw new Error('unexpected ' + id);
+        });
+
         const result = await callTool('create_invoice', {
             contact: 'https://api.freeagent.com/v2/contacts/1',
             project_ids: ['100', '200'],
@@ -88,16 +95,52 @@ describe('scenario: "create an invoice for projects X and Y"', () => {
         expect(result.isError).toBe(true);
 
         const text = (result.content as any)[0].text as string;
-        expect(text).toContain('numbering_source');
-        expect(text).toContain('"100"');
-        expect(text).toContain('"200"');
-        expect(text).toContain('"org-wide"');
+        // The menu lists eligible projects (by name and ID), the org-wide
+        // sentinel, AND notes that 200 (Beta) is ineligible — informed by
+        // the per-project inspection so the user picks with full info.
+        expect(text).toContain('numbering_source: "100"');
+        expect(text).toContain('Alpha');
+        expect(text).toContain('numbering_source: "org-wide"');
+        expect(text).toContain('Beta');
+        expect(text).not.toContain('numbering_source: "200"');
     });
 
-    it('third call: agent retries with both include_timeslips and numbering_source, MCP forwards to FreeAgent', async () => {
+    it('third call (recovery from a wrong pick): agent picks project 200 as numbering_source — MCP refuses since 200 has no per-project sequence', async () => {
+        vi.mocked(mockFaClient.getProject).mockImplementation(async (id: string) => {
+            if (id === '100') return { url: '...', name: 'Alpha', uses_project_invoice_sequence: true } as any;
+            if (id === '200') return { url: '...', name: 'Beta', uses_project_invoice_sequence: false } as any;
+            throw new Error('unexpected ' + id);
+        });
+
+        const result = await callTool('create_invoice', {
+            contact: 'https://api.freeagent.com/v2/contacts/1',
+            project_ids: ['100', '200'],
+            numbering_source: '200',
+            dated_on: '2026-04-30',
+            include_timeslips: 'billed_grouped_by_timeslip_task',
+        });
+
+        expect(mockFaClient.createInvoice).not.toHaveBeenCalled();
+        expect(result.isError).toBe(true);
+        const text = (result.content as any)[0].text as string;
+        // The refusal explains why 200 isn't a valid pick AND offers
+        // sensible alternatives so the agent can correct without
+        // a third round-trip.
+        expect(text).toContain('Beta');
+        expect(text).toContain('silently fall back to the organisation-wide sequence');
+        expect(text).toContain('numbering_source: "100"');
+        expect(text).toContain('numbering_source: "org-wide"');
+    });
+
+    it('fourth call: agent picks an eligible numbering_source — MCP forwards to FreeAgent', async () => {
+        vi.mocked(mockFaClient.getProject).mockImplementation(async (id: string) => {
+            if (id === '100') return { url: '...', name: 'Alpha', uses_project_invoice_sequence: true } as any;
+            if (id === '200') return { url: '...', name: 'Beta', uses_project_invoice_sequence: false } as any;
+            throw new Error('unexpected ' + id);
+        });
         const created = {
             url: 'https://api.freeagent.com/v2/invoices/42',
-            reference: 'PROJ-A-001',
+            reference: 'ALPHA-001',
             status: 'Draft',
         };
         vi.mocked(mockFaClient.createInvoice).mockResolvedValue(created as any);
@@ -120,7 +163,7 @@ describe('scenario: "create an invoice for projects X and Y"', () => {
         expect(parseResult(result)).toEqual(created);
     });
 
-    it('alternative happy path: agent uses omit_unbilled_timeslips and numbering_source="org-wide"', async () => {
+    it('alternative happy path: agent uses omit_unbilled_timeslips and numbering_source="org-wide" — no project inspection needed', async () => {
         const created = { url: 'https://api.freeagent.com/v2/invoices/43', status: 'Draft' };
         vi.mocked(mockFaClient.createInvoice).mockResolvedValue(created as any);
 
@@ -136,6 +179,10 @@ describe('scenario: "create an invoice for projects X and Y"', () => {
         });
 
         expect(mockFaClient.listTimeslips).not.toHaveBeenCalled();
+        // Even though we still inspect projects to validate any specific
+        // numbering source pick, "org-wide" means no project's settings
+        // matter — but for safety the inspection still runs (fine; no
+        // assertion either way here).
         expect(mockFaClient.createInvoice).toHaveBeenCalledTimes(1);
 
         const forwarded = vi.mocked(mockFaClient.createInvoice).mock.calls[0][0];
