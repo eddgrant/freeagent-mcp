@@ -62,7 +62,9 @@ export function clearMockClient(mockFaClient: FreeAgentClient): void {
     });
 }
 
-export function parseToolResult(result: { content: unknown }): unknown {
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+export function parseToolResult(result: unknown): unknown {
+    const content = (result as { content?: Array<{ type: string; text: string }> }).content;
+    if (!content || !content[0]) return undefined;
+    const text = content[0].text;
     try { return JSON.parse(text); } catch { return text; }
 }

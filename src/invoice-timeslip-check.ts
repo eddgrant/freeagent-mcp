@@ -10,7 +10,7 @@
 // either `include_timeslips` (yes, attach them like so) or
 // `omit_unbilled_timeslips: true` (no, leave them alone).
 
-import type { Timeslip } from './types.js';
+import type { Project, Timeslip } from './types.js';
 
 export interface TimeslipQuerier {
     listTimeslips(params: {
@@ -68,27 +68,83 @@ export async function findUnbilledTimeslipsForProjects(
     return out;
 }
 
-// Numbering-source refusal message for multi-project invoices.
+// Numbering-source refusal helpers for multi-project invoices.
 //
 // The singular `invoice.project` field on FreeAgent's API controls which
 // project's invoice sequence the new invoice's reference is drawn from
-// (or the org-wide sequence when omitted). On a multi-project invoice
-// the choice is ambiguous, so we refuse unless the caller has set
-// `numbering_source` explicitly. We don't inspect the projects to check
-// which ones have per-project sequences — the user knows their own setup,
-// and FreeAgent just falls back to org-wide for any picked project that
-// doesn't have its own sequence, so no harm done.
+// — or the org-wide sequence when omitted. On a multi-project invoice
+// the choice is ambiguous, and FreeAgent will silently fall back to the
+// org-wide sequence if the user picks a project that has no per-project
+// sequence configured. Both behaviours are surprising, so we inspect each
+// implicated project up front and refuse with an informative menu.
 
-export function formatNumberingRefusal(projectIds: string[]): string {
-    const lines: string[] = [];
-    lines.push('Refusing to create this multi-project invoice — the choice of invoice numbering sequence is ambiguous.');
-    lines.push('');
-    lines.push('Pick the source for the invoice reference number by setting `numbering_source`:');
-    lines.push('');
+export interface ProjectQuerier {
+    getProject(id: string): Promise<Project>;
+}
+
+export interface NumberingCandidate {
+    id: string;
+    name: string;
+    usesProjectInvoiceSequence: boolean;
+}
+
+export async function inspectProjectsForNumbering(
+    client: ProjectQuerier,
+    projectIds: string[],
+): Promise<NumberingCandidate[]> {
+    const out: NumberingCandidate[] = [];
     for (const id of projectIds) {
-        lines.push(`  numbering_source: "${id}"   → draw the invoice number from project ${id}'s per-project sequence (or fall back to the organisation-wide sequence if that project does not have one configured)`);
+        const project = await client.getProject(id);
+        out.push({
+            id,
+            name: project.name,
+            usesProjectInvoiceSequence: project.uses_project_invoice_sequence === true,
+        });
     }
-    lines.push(`  numbering_source: "org-wide"  → explicitly use the organisation-wide invoice sequence, ignoring any project-level sequences`);
+    return out;
+}
+
+export function formatNumberingRefusal(candidates: NumberingCandidate[]): string {
+    const eligible = candidates.filter(c => c.usesProjectInvoiceSequence);
+    const ineligible = candidates.filter(c => !c.usesProjectInvoiceSequence);
+    const lines: string[] = [];
+    lines.push('Refusing to create this multi-project invoice — the choice of invoice numbering sequence must be made explicitly.');
+    lines.push('');
+    lines.push('Pick a `numbering_source`:');
+    lines.push('');
+    for (const c of eligible) {
+        lines.push(`  numbering_source: "${c.id}"   → use project ${c.id} (${c.name})'s per-project invoice sequence`);
+    }
+    lines.push(`  numbering_source: "org-wide"  → use the organisation-wide invoice sequence`);
+    if (ineligible.length > 0) {
+        lines.push('');
+        lines.push('These projects on the invoice do NOT have a per-project invoice sequence configured and cannot be used as numbering sources. Their timeslips will still be invoiced normally:');
+        for (const c of ineligible) {
+            lines.push(`  - project ${c.id} (${c.name})`);
+        }
+    }
+    return lines.join('\n');
+}
+
+// Caller picked a specific project as numbering_source, but that project
+// has no per-project sequence configured. FreeAgent would silently fall
+// back to org-wide; we refuse instead so the surprise is surfaced.
+export function formatNumberingPickIneligible(
+    picked: NumberingCandidate,
+    candidates: NumberingCandidate[],
+): string {
+    const otherEligible = candidates.filter(c => c.id !== picked.id && c.usesProjectInvoiceSequence);
+    const lines: string[] = [];
+    lines.push(`Refusing to create this invoice — you set \`numbering_source: "${picked.id}"\` but project ${picked.id} (${picked.name}) does not have a per-project invoice sequence configured in FreeAgent.`);
+    lines.push('');
+    lines.push('If we proceeded, FreeAgent would silently fall back to the organisation-wide sequence for this invoice, which is probably not what you intended.');
+    lines.push('');
+    lines.push('Choose one of:');
+    for (const c of otherEligible) {
+        lines.push(`  numbering_source: "${c.id}"   → use project ${c.id} (${c.name})'s per-project sequence instead`);
+    }
+    lines.push(`  numbering_source: "org-wide"  → explicitly use the organisation-wide invoice sequence`);
+    lines.push(`  Or configure project ${picked.id} to use a per-project invoice sequence in FreeAgent, then retry.`);
     return lines.join('\n');
 }
 

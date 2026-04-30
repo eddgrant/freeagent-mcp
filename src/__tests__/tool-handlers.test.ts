@@ -480,7 +480,13 @@ describe('create_invoice', () => {
     expect(forwarded.project).toBe('https://api.freeagent.com/v2/projects/100');
   });
 
-  it('refuses multi-project create when numbering_source is unset', async () => {
+  it('refuses multi-project create when numbering_source is unset, with rich menu reflecting per-project sequence settings', async () => {
+    vi.mocked(mockFaClient.getProject).mockImplementation(async (id: string) => {
+      if (id === '100') return { url: '...', name: 'Alpha', uses_project_invoice_sequence: true } as any;
+      if (id === '200') return { url: '...', name: 'Beta', uses_project_invoice_sequence: false } as any;
+      throw new Error('unexpected ' + id);
+    });
+
     const result = await callTool('create_invoice', {
       contact: 'https://api.freeagent.com/v2/contacts/1',
       project_ids: ['100', '200'],
@@ -491,12 +497,44 @@ describe('create_invoice', () => {
     expect(result.isError).toBe(true);
     expect(mockFaClient.createInvoice).not.toHaveBeenCalled();
     const text = (result.content as any)[0].text as string;
+    // Eligible projects show as numbering_source options.
     expect(text).toContain('numbering_source: "100"');
-    expect(text).toContain('numbering_source: "200"');
+    expect(text).toContain('Alpha');
+    expect(text).toContain('numbering_source: "org-wide"');
+    // Ineligible project is mentioned but not as an option.
+    expect(text).toContain('Beta');
+    expect(text).not.toContain('numbering_source: "200"');
+  });
+
+  it('refuses when numbering_source picks a project that has no per-project sequence configured', async () => {
+    vi.mocked(mockFaClient.getProject).mockImplementation(async (id: string) => {
+      if (id === '100') return { url: '...', name: 'Alpha', uses_project_invoice_sequence: true } as any;
+      if (id === '200') return { url: '...', name: 'Beta', uses_project_invoice_sequence: false } as any;
+      throw new Error('unexpected ' + id);
+    });
+
+    const result = await callTool('create_invoice', {
+      contact: 'https://api.freeagent.com/v2/contacts/1',
+      project_ids: ['100', '200'],
+      numbering_source: '200',
+      dated_on: '2026-03-01',
+      omit_unbilled_timeslips: true,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(mockFaClient.createInvoice).not.toHaveBeenCalled();
+    const text = (result.content as any)[0].text as string;
+    expect(text).toContain('Beta');
+    expect(text).toContain('does not have a per-project invoice sequence');
+    // Suggests the eligible alternative (100/Alpha) and org-wide.
+    expect(text).toContain('numbering_source: "100"');
     expect(text).toContain('numbering_source: "org-wide"');
   });
 
-  it('proceeds when numbering_source picks a project ID from project_ids', async () => {
+  it('proceeds when numbering_source picks a project that has a per-project sequence', async () => {
+    vi.mocked(mockFaClient.getProject).mockImplementation(async (id: string) => ({
+      url: '...', name: `P${id}`, uses_project_invoice_sequence: true,
+    }) as any);
     const invoice = { url: 'https://api.freeagent.com/v2/invoices/1' };
     vi.mocked(mockFaClient.createInvoice).mockResolvedValue(invoice as any);
 
@@ -513,7 +551,10 @@ describe('create_invoice', () => {
     expect(forwarded.project_ids).toEqual(['100', '200']);
   });
 
-  it('proceeds when numbering_source is "org-wide" and omits the wire project field', async () => {
+  it('proceeds when numbering_source is "org-wide" and omits the wire project field — no project inspection needed for the org-wide case', async () => {
+    vi.mocked(mockFaClient.getProject).mockImplementation(async (id: string) => ({
+      url: '...', name: `P${id}`, uses_project_invoice_sequence: false,
+    }) as any);
     const invoice = { url: 'https://api.freeagent.com/v2/invoices/1' };
     vi.mocked(mockFaClient.createInvoice).mockResolvedValue(invoice as any);
 
