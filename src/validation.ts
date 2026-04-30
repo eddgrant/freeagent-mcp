@@ -158,6 +158,39 @@ export function validateInvoiceAttributes(data: unknown): InvoiceAttributes {
   if (Array.isArray(attrs.invoice_items)) {
     invoice.invoice_items = attrs.invoice_items.map((item, i) => validateInvoiceItemAttributes(item, i));
   }
+  if (attrs.project_ids !== undefined) {
+    invoice.project_ids = normaliseProjectIds(attrs.project_ids, invoice.project);
+  }
 
   return invoice;
+}
+
+// FreeAgent's public API silently ignores invoice.project_ids unless every
+// entry is a numeric ID string (URLs are dropped) AND the primary project's
+// ID is also present in the array. This normaliser accepts either form,
+// converts URLs to IDs, and auto-includes the primary if a `project` URL is
+// present but not represented in the array.
+export function normaliseProjectIds(input: unknown, primaryProject?: string): string[] {
+  if (!Array.isArray(input)) {
+    throw new Error('Invalid invoice data: project_ids must be an array of project IDs');
+  }
+  const ids = new Set<string>();
+  for (let i = 0; i < input.length; i++) {
+    const raw = input[i];
+    if (typeof raw !== 'string') {
+      throw new Error(`Invalid invoice data: project_ids[${i}] must be a string`);
+    }
+    ids.add(extractProjectId(raw, `project_ids[${i}]`));
+  }
+  if (primaryProject) {
+    ids.add(extractProjectId(primaryProject, 'project'));
+  }
+  return Array.from(ids);
+}
+
+function extractProjectId(value: string, label: string): string {
+  if (/^\d+$/.test(value)) return value;
+  const m = value.match(/\/projects\/(\d+)\/?$/);
+  if (m) return m[1];
+  throw new Error(`Invalid invoice data: ${label} must be a numeric project ID or a project URL, got "${value}"`);
 }

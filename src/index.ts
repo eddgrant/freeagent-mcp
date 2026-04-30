@@ -10,8 +10,13 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { FreeAgentClient } from './freeagent-client.js';
 import { TimeslipAttributes, InvoiceAttributes, ProjectAttributes } from './types.js';
-import { validateId, validateTimeslipAttributes, validateInvoiceItemAttributes, validateInvoiceAttributes, validateProjectAttributes, validateTaskAttributes } from './validation.js';
+import { validateId, validateTimeslipAttributes, validateInvoiceItemAttributes, validateInvoiceAttributes, validateProjectAttributes, validateTaskAttributes, normaliseProjectIds } from './validation.js';
 import { installLifecycleHandlers } from './lifecycle.js';
+import {
+  deriveImplicatedProjectUrls,
+  findUnbilledTimeslipsForProjects,
+  formatUnbilledRefusal,
+} from './invoice-timeslip-check.js';
 
 export class FreeAgentServer {
   private server: Server;
@@ -268,12 +273,17 @@ export class FreeAgentServer {
         },
         {
           name: 'create_invoice',
-          description: 'Create a new invoice. Can optionally attach unbilled timeslips using include_timeslips grouping mode.',
+          description: 'Create a new invoice. By default, refuses to create the invoice if unbilled timeslips exist on the implicated project(s) without explicit handling — pass include_timeslips to attach them, or omit_unbilled_timeslips: true to deliberately leave them unbilled. Supports invoices spanning multiple projects via project_ids.',
           inputSchema: {
             type: 'object' as const,
             properties: {
               contact: { type: 'string', description: 'Contact URL' },
-              project: { type: 'string', description: 'Project URL' },
+              project: { type: 'string', description: 'Primary project URL (optional)' },
+              project_ids: {
+                type: 'array',
+                description: 'Multi-project: numeric project IDs to span across this invoice (URLs accepted but converted to IDs). The primary project (if set via `project`) is auto-included. Setting this lets include_timeslips pull timeslips from every listed project.',
+                items: { type: 'string' }
+              },
               dated_on: { type: 'string', description: 'Invoice date (YYYY-MM-DD)' },
               payment_terms_in_days: { type: 'number', description: 'Payment terms in days (default: 30)' },
               comments: { type: 'string', description: 'Additional comments' },
@@ -290,7 +300,11 @@ export class FreeAgentServer {
                   'billed_grouped_by_timeslip_task',
                   'billed_grouped_by_timeslip_date'
                 ],
-                description: 'How to group unbilled timeslips into invoice line items'
+                description: 'How to group unbilled timeslips into invoice line items. When set, all unbilled timeslips on the implicated project(s) are attached.'
+              },
+              omit_unbilled_timeslips: {
+                type: 'boolean',
+                description: 'Set to true to deliberately create the invoice without attaching unbilled timeslips that exist on the implicated project(s). Required when include_timeslips is omitted and unbilled timeslips exist.'
               },
               invoice_items: {
                 type: 'array',
@@ -342,7 +356,7 @@ export class FreeAgentServer {
         },
         {
           name: 'update_invoice',
-          description: 'Update an existing invoice. Use this to modify line item descriptions, payment terms, comments, etc.',
+          description: 'Update an existing invoice. Use this to modify line item descriptions, payment terms, comments, or to extend an existing single-project invoice across additional projects via project_ids. When project_ids is set, the same detect-and-refuse safety check as create_invoice applies.',
           inputSchema: {
             type: 'object' as const,
             properties: {
@@ -353,6 +367,25 @@ export class FreeAgentServer {
                 type: 'string',
                 enum: ['UK Non-EC', 'EC VAT Registered', 'EC VAT Moss', 'EC Non-VAT Registered', 'Non-EC'],
                 description: 'EC/VAT status'
+              },
+              project_ids: {
+                type: 'array',
+                description: 'Multi-project: numeric project IDs to extend this invoice across (URLs accepted but converted to IDs). The invoice\'s existing primary project is auto-included.',
+                items: { type: 'string' }
+              },
+              include_timeslips: {
+                type: 'string',
+                enum: [
+                  'billed_grouped_by_timeslip',
+                  'billed_grouped_by_single_timeslip',
+                  'billed_grouped_by_timeslip_task',
+                  'billed_grouped_by_timeslip_date'
+                ],
+                description: 'When extending the invoice with project_ids, set this to attach unbilled timeslips from the newly added project(s).'
+              },
+              omit_unbilled_timeslips: {
+                type: 'boolean',
+                description: 'When extending the invoice with project_ids, set to true to deliberately leave unbilled timeslips on the added project(s) untouched.'
               },
               invoice_items: {
                 type: 'array',
@@ -795,8 +828,34 @@ export class FreeAgentServer {
             if (typeof updates.payment_terms_in_days === 'number') invoiceUpdates.payment_terms_in_days = updates.payment_terms_in_days;
             if (typeof updates.comments === 'string') invoiceUpdates.comments = updates.comments;
             if (typeof updates.ec_status === 'string') invoiceUpdates.ec_status = updates.ec_status;
+            if (typeof updates.include_timeslips === 'string') invoiceUpdates.include_timeslips = updates.include_timeslips;
             if (Array.isArray(updates.invoice_items)) {
               invoiceUpdates.invoice_items = updates.invoice_items.map((item, i) => validateInvoiceItemAttributes(item, i));
+            }
+            if (updates.project_ids !== undefined) {
+              // Fetch the existing invoice to auto-include its primary project ID.
+              const existing = await this.client.getInvoice(id);
+              invoiceUpdates.project_ids = normaliseProjectIds(updates.project_ids, existing.project);
+
+              // Detect-and-refuse on update applies only when the caller is
+              // extending project scope (project_ids set) without an active
+              // timeslip directive.
+              const omitUnbilled = updates.omit_unbilled_timeslips === true;
+              if (!invoiceUpdates.include_timeslips && !omitUnbilled) {
+                const projectUrls = deriveImplicatedProjectUrls({
+                  existingProject: existing.project,
+                  projectIds: invoiceUpdates.project_ids,
+                });
+                if (projectUrls.length > 0) {
+                  const unbilled = await findUnbilledTimeslipsForProjects(this.client, projectUrls);
+                  if (unbilled.length > 0) {
+                    return {
+                      content: [{ type: 'text' as const, text: formatUnbilledRefusal(unbilled) }],
+                      isError: true,
+                    };
+                  }
+                }
+              }
             }
 
             const invoice = await this.client.updateInvoice(id, invoiceUpdates);
@@ -806,7 +865,29 @@ export class FreeAgentServer {
           }
 
           case 'create_invoice': {
-            const invoiceAttrs = validateInvoiceAttributes(request.params.arguments);
+            const args = request.params.arguments as Record<string, unknown>;
+            const invoiceAttrs = validateInvoiceAttributes(args);
+            const omitUnbilled = args.omit_unbilled_timeslips === true;
+
+            // Detect-and-refuse: if the caller didn't explicitly include or
+            // omit timeslips, check whether unbilled time exists on the
+            // implicated project(s) and bail out with a clear next-step menu.
+            if (!invoiceAttrs.include_timeslips && !omitUnbilled) {
+              const projectUrls = deriveImplicatedProjectUrls({
+                project: invoiceAttrs.project,
+                projectIds: invoiceAttrs.project_ids,
+              });
+              if (projectUrls.length > 0) {
+                const unbilled = await findUnbilledTimeslipsForProjects(this.client, projectUrls);
+                if (unbilled.length > 0) {
+                  return {
+                    content: [{ type: 'text' as const, text: formatUnbilledRefusal(unbilled) }],
+                    isError: true,
+                  };
+                }
+              }
+            }
+
             const invoice = await this.client.createInvoice(invoiceAttrs);
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(invoice, null, 2) }]

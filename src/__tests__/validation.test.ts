@@ -6,6 +6,7 @@ import {
   validateInvoiceAttributes,
   validateProjectAttributes,
   validateTaskAttributes,
+  normaliseProjectIds,
 } from '../validation.js';
 
 describe('validateId', () => {
@@ -326,5 +327,73 @@ describe('validateInvoiceAttributes', () => {
 
   it('rejects when dated_on is missing', () => {
     expect(() => validateInvoiceAttributes({ contact: 'url' })).toThrow('contact and dated_on are required');
+  });
+
+  it('normalises project_ids when provided as numeric IDs', () => {
+    const result = validateInvoiceAttributes({
+      ...validInvoice,
+      project: 'https://api.freeagent.com/v2/projects/100',
+      project_ids: ['100', '200'],
+    });
+    expect(result.project_ids).toEqual(['100', '200']);
+  });
+
+  it('extracts project_ids from URLs', () => {
+    const result = validateInvoiceAttributes({
+      ...validInvoice,
+      project_ids: ['https://api.freeagent.com/v2/projects/100', 'https://api.freeagent.com/v2/projects/200'],
+    });
+    expect(result.project_ids).toEqual(['100', '200']);
+  });
+
+  it('auto-includes the primary project ID in project_ids when missing', () => {
+    const result = validateInvoiceAttributes({
+      ...validInvoice,
+      project: 'https://api.freeagent.com/v2/projects/100',
+      project_ids: ['200'],
+    });
+    expect(result.project_ids).toEqual(['200', '100']);
+  });
+});
+
+describe('normaliseProjectIds', () => {
+  it('accepts numeric ID strings as-is', () => {
+    expect(normaliseProjectIds(['1', '2', '3'])).toEqual(['1', '2', '3']);
+  });
+
+  it('extracts numeric IDs from full project URLs', () => {
+    expect(normaliseProjectIds(['https://api.freeagent.com/v2/projects/42'])).toEqual(['42']);
+  });
+
+  it('extracts IDs from URLs with trailing slash', () => {
+    expect(normaliseProjectIds(['https://api.freeagent.com/v2/projects/42/'])).toEqual(['42']);
+  });
+
+  it('deduplicates IDs', () => {
+    expect(normaliseProjectIds(['1', '2', '1'])).toEqual(['1', '2']);
+  });
+
+  it('auto-includes the primary project ID when a primary URL is provided', () => {
+    expect(normaliseProjectIds(['200'], 'https://api.freeagent.com/v2/projects/100')).toEqual(['200', '100']);
+  });
+
+  it('does not duplicate the primary ID when already in the array', () => {
+    expect(normaliseProjectIds(['100', '200'], 'https://api.freeagent.com/v2/projects/100')).toEqual(['100', '200']);
+  });
+
+  it('rejects non-array input', () => {
+    expect(() => normaliseProjectIds('100')).toThrow('must be an array');
+  });
+
+  it('rejects non-string entries', () => {
+    expect(() => normaliseProjectIds([100])).toThrow('project_ids[0] must be a string');
+  });
+
+  it('rejects strings that are neither numeric nor project URLs', () => {
+    expect(() => normaliseProjectIds(['not-a-project'])).toThrow('numeric project ID or a project URL');
+  });
+
+  it('rejects when primary project URL is malformed', () => {
+    expect(() => normaliseProjectIds(['200'], 'https://example.com/foo')).toThrow('project must be a numeric project ID or a project URL');
   });
 });

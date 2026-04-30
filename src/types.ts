@@ -145,6 +145,7 @@ export interface InvoiceItemAttributes {
 export interface InvoiceAttributes {
     contact: string;
     project?: string;
+    project_ids?: string[];
     dated_on: string;
     payment_terms_in_days: number;
     currency?: string;
