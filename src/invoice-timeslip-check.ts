@@ -68,6 +68,30 @@ export async function findUnbilledTimeslipsForProjects(
     return out;
 }
 
+// Numbering-source refusal message for multi-project invoices.
+//
+// The singular `invoice.project` field on FreeAgent's API controls which
+// project's invoice sequence the new invoice's reference is drawn from
+// (or the org-wide sequence when omitted). On a multi-project invoice
+// the choice is ambiguous, so we refuse unless the caller has set
+// `numbering_source` explicitly. We don't inspect the projects to check
+// which ones have per-project sequences — the user knows their own setup,
+// and FreeAgent just falls back to org-wide for any picked project that
+// doesn't have its own sequence, so no harm done.
+
+export function formatNumberingRefusal(projectIds: string[]): string {
+    const lines: string[] = [];
+    lines.push('Refusing to create this multi-project invoice — the choice of invoice numbering sequence is ambiguous.');
+    lines.push('');
+    lines.push('Pick the source for the invoice reference number by setting `numbering_source`:');
+    lines.push('');
+    for (const id of projectIds) {
+        lines.push(`  numbering_source: "${id}"   → draw the invoice number from project ${id}'s per-project sequence (or fall back to the organisation-wide sequence if that project does not have one configured)`);
+    }
+    lines.push(`  numbering_source: "org-wide"  → explicitly use the organisation-wide invoice sequence, ignoring any project-level sequences`);
+    return lines.join('\n');
+}
+
 export function formatUnbilledRefusal(unbilled: UnbilledByProject[]): string {
     const lines: string[] = [];
     lines.push('Refusing to create/update this invoice — unbilled timeslips exist on the implicated project(s):');

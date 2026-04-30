@@ -21,6 +21,7 @@ export function createMockFreeAgentClient(): FreeAgentClient {
         startTimer: vi.fn(),
         stopTimer: vi.fn(),
         createProject: vi.fn(),
+        getProject: vi.fn(),
         listProjects: vi.fn(),
         createTask: vi.fn(),
         listTasks: vi.fn(),

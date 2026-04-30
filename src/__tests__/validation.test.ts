@@ -7,6 +7,9 @@ import {
   validateProjectAttributes,
   validateTaskAttributes,
   normaliseProjectIds,
+  normaliseNumberingSource,
+  buildInvoicePayload,
+  ORG_WIDE_NUMBERING,
 } from '../validation.js';
 
 describe('validateId', () => {
@@ -277,11 +280,6 @@ describe('validateInvoiceAttributes', () => {
     expect(result.payment_terms_in_days).toBe(14);
   });
 
-  it('includes project when present', () => {
-    const result = validateInvoiceAttributes({ ...validInvoice, project: 'https://api.freeagent.com/v2/projects/1' });
-    expect(result.project).toBe('https://api.freeagent.com/v2/projects/1');
-  });
-
   it('includes currency when present', () => {
     const result = validateInvoiceAttributes({ ...validInvoice, currency: 'GBP' });
     expect(result.currency).toBe('GBP');
@@ -332,7 +330,6 @@ describe('validateInvoiceAttributes', () => {
   it('normalises project_ids when provided as numeric IDs', () => {
     const result = validateInvoiceAttributes({
       ...validInvoice,
-      project: 'https://api.freeagent.com/v2/projects/100',
       project_ids: ['100', '200'],
     });
     expect(result.project_ids).toEqual(['100', '200']);
@@ -346,13 +343,30 @@ describe('validateInvoiceAttributes', () => {
     expect(result.project_ids).toEqual(['100', '200']);
   });
 
-  it('auto-includes the primary project ID in project_ids when missing', () => {
+  it('accepts numbering_source as a project ID present in project_ids', () => {
     const result = validateInvoiceAttributes({
       ...validInvoice,
-      project: 'https://api.freeagent.com/v2/projects/100',
-      project_ids: ['200'],
+      project_ids: ['100', '200'],
+      numbering_source: '100',
     });
-    expect(result.project_ids).toEqual(['200', '100']);
+    expect(result.numbering_source).toBe('100');
+  });
+
+  it('accepts numbering_source as the org-wide sentinel', () => {
+    const result = validateInvoiceAttributes({
+      ...validInvoice,
+      project_ids: ['100', '200'],
+      numbering_source: 'org-wide',
+    });
+    expect(result.numbering_source).toBe('org-wide');
+  });
+
+  it('rejects numbering_source pointing at a project not in project_ids', () => {
+    expect(() => validateInvoiceAttributes({
+      ...validInvoice,
+      project_ids: ['100', '200'],
+      numbering_source: '999',
+    })).toThrow('numbering_source "999" is not in project_ids');
   });
 });
 
@@ -369,16 +383,8 @@ describe('normaliseProjectIds', () => {
     expect(normaliseProjectIds(['https://api.freeagent.com/v2/projects/42/'])).toEqual(['42']);
   });
 
-  it('deduplicates IDs', () => {
+  it('deduplicates IDs while preserving first-seen order', () => {
     expect(normaliseProjectIds(['1', '2', '1'])).toEqual(['1', '2']);
-  });
-
-  it('auto-includes the primary project ID when a primary URL is provided', () => {
-    expect(normaliseProjectIds(['200'], 'https://api.freeagent.com/v2/projects/100')).toEqual(['200', '100']);
-  });
-
-  it('does not duplicate the primary ID when already in the array', () => {
-    expect(normaliseProjectIds(['100', '200'], 'https://api.freeagent.com/v2/projects/100')).toEqual(['100', '200']);
   });
 
   it('rejects non-array input', () => {
@@ -392,8 +398,60 @@ describe('normaliseProjectIds', () => {
   it('rejects strings that are neither numeric nor project URLs', () => {
     expect(() => normaliseProjectIds(['not-a-project'])).toThrow('numeric project ID or a project URL');
   });
+});
 
-  it('rejects when primary project URL is malformed', () => {
-    expect(() => normaliseProjectIds(['200'], 'https://example.com/foo')).toThrow('project must be a numeric project ID or a project URL');
+describe('normaliseNumberingSource', () => {
+  it('accepts "org-wide" sentinel', () => {
+    expect(normaliseNumberingSource('org-wide', ['100'])).toBe(ORG_WIDE_NUMBERING);
+  });
+
+  it('accepts a numeric ID that appears in project_ids', () => {
+    expect(normaliseNumberingSource('100', ['100', '200'])).toBe('100');
+  });
+
+  it('extracts ID from a URL and validates membership', () => {
+    expect(normaliseNumberingSource('https://api.freeagent.com/v2/projects/200', ['100', '200'])).toBe('200');
+  });
+
+  it('rejects a project ID not in project_ids', () => {
+    expect(() => normaliseNumberingSource('999', ['100', '200'])).toThrow('not in project_ids');
+  });
+
+  it('rejects a non-string value', () => {
+    expect(() => normaliseNumberingSource(100, ['100'])).toThrow('numbering_source must be a string');
+  });
+});
+
+describe('buildInvoicePayload', () => {
+  const base = { contact: 'https://api.freeagent.com/v2/contacts/1', dated_on: '2026-04-01', payment_terms_in_days: 30 };
+
+  it('omits project and project_ids when no project_ids are provided', () => {
+    const wire = buildInvoicePayload(base);
+    expect(wire.project).toBeUndefined();
+    expect(wire.project_ids).toBeUndefined();
+  });
+
+  it('single-project invoice: defaults project to that project URL (preserves per-project sequence)', () => {
+    const wire = buildInvoicePayload({ ...base, project_ids: ['100'] });
+    expect(wire.project).toBe('https://api.freeagent.com/v2/projects/100');
+    expect(wire.project_ids).toEqual(['100']);
+  });
+
+  it('multi-project with numbering_source pointing at a project: uses that project URL on wire', () => {
+    const wire = buildInvoicePayload({ ...base, project_ids: ['100', '200'], numbering_source: '200' });
+    expect(wire.project).toBe('https://api.freeagent.com/v2/projects/200');
+    expect(wire.project_ids).toEqual(['100', '200']);
+  });
+
+  it('multi-project with numbering_source = "org-wide": omits the wire project field', () => {
+    const wire = buildInvoicePayload({ ...base, project_ids: ['100', '200'], numbering_source: ORG_WIDE_NUMBERING });
+    expect(wire.project).toBeUndefined();
+    expect(wire.project_ids).toEqual(['100', '200']);
+  });
+
+  it('multi-project without numbering_source: omits the wire project field (caller must have passed numbering check first)', () => {
+    const wire = buildInvoicePayload({ ...base, project_ids: ['100', '200'] });
+    expect(wire.project).toBeUndefined();
+    expect(wire.project_ids).toEqual(['100', '200']);
   });
 });
