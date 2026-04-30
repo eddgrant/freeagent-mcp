@@ -54,10 +54,25 @@ export class FreeAgentServer {
     this.setupToolHandlers();
 
     this.server.onerror = (error) => console.error('[MCP Error]', error);
-    process.on('SIGINT', async () => {
-      await this.server.close();
+
+    // Lifecycle: shut down cleanly when the MCP client disconnects (closes
+    // stdin), when Docker sends SIGTERM (e.g. `docker stop`), or when the
+    // user hits Ctrl-C in a TTY. Without these handlers the container
+    // survives client disconnect indefinitely (the SDK's StdioServerTransport
+    // only listens for stdin 'data'/'error', not 'end'/'close'), leading to
+    // zombie containers piling up across MCP-client sessions.
+    let shuttingDown = false;
+    const shutdown = async (reason: string) => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      console.error(`[Setup] Shutting down: ${reason}`);
+      try { await this.server.close(); } catch { /* already closed */ }
       process.exit(0);
-    });
+    };
+    process.on('SIGINT', () => { void shutdown('SIGINT'); });
+    process.on('SIGTERM', () => { void shutdown('SIGTERM'); });
+    process.stdin.on('end', () => { void shutdown('stdin EOF'); });
+    process.stdin.on('close', () => { void shutdown('stdin closed'); });
   }
 
   private setupToolHandlers() {
