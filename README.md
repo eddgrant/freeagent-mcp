@@ -19,10 +19,13 @@ Forked from [markpitt/freeagent-mcp](https://github.com/markpitt/freeagent-mcp).
 
 ### Invoices
 - "Create an invoice for Client Foo for March, pulling in all unbilled timeslips"
+- "Bill Client Foo for both the Discovery and Healthcheck projects on a single invoice"
 - "Update the invoice description to include the billing period"
 - "Download invoice 285 as a PDF to my invoices folder"
 - "Mark the draft invoice as sent"
 - "Show me all overdue invoices"
+
+`create_invoice` and `update_invoice` refuse by default if the implicated project(s) have unbilled timeslips and you haven't told the tool what to do with them. Either pass `include_timeslips` (with a grouping mode) to attach them, or `omit_unbilled_timeslips: true` to leave them alone — this prevents accidentally invoicing a project while leaving billable time stranded. Multi-project invoices are supported via the `project_ids` field on both tools.
 
 ### Bills, Bank Transactions & Categories
 - "Show me all bills from January to March"

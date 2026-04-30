@@ -423,6 +423,7 @@ describe('create_invoice', () => {
   it('validates attributes and calls client', async () => {
     const invoice = { url: 'https://api.freeagent.com/v2/invoices/1' };
     vi.mocked(mockFaClient.createInvoice).mockResolvedValue(invoice as any);
+    vi.mocked(mockFaClient.listTimeslips).mockResolvedValue([]);
 
     const result = await callTool('create_invoice', {
       contact: 'https://api.freeagent.com/v2/contacts/1',
@@ -431,6 +432,104 @@ describe('create_invoice', () => {
 
     expect(mockFaClient.createInvoice).toHaveBeenCalled();
     expect(parseResult(result)).toEqual(invoice);
+  });
+
+  it('refuses when unbilled timeslips exist on the implicated project and no directive is given', async () => {
+    vi.mocked(mockFaClient.listTimeslips).mockResolvedValue([
+      { url: 'https://api.freeagent.com/v2/timeslips/1', dated_on: '2026-03-01', hours: '2.0' } as any,
+    ]);
+
+    const result = await callTool('create_invoice', {
+      contact: 'https://api.freeagent.com/v2/contacts/1',
+      project: 'https://api.freeagent.com/v2/projects/100',
+      dated_on: '2026-03-01',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(mockFaClient.createInvoice).not.toHaveBeenCalled();
+    expect((result.content as any)[0].text).toContain('unbilled timeslip');
+    expect((result.content as any)[0].text).toContain('omit_unbilled_timeslips: true');
+  });
+
+  it('proceeds when include_timeslips is set even with unbilled timeslips present', async () => {
+    const invoice = { url: 'https://api.freeagent.com/v2/invoices/1' };
+    vi.mocked(mockFaClient.createInvoice).mockResolvedValue(invoice as any);
+    // The check is bypassed entirely, so listTimeslips should not even be called.
+
+    await callTool('create_invoice', {
+      contact: 'https://api.freeagent.com/v2/contacts/1',
+      project: 'https://api.freeagent.com/v2/projects/100',
+      dated_on: '2026-03-01',
+      include_timeslips: 'billed_grouped_by_timeslip_task',
+    });
+
+    expect(mockFaClient.listTimeslips).not.toHaveBeenCalled();
+    expect(mockFaClient.createInvoice).toHaveBeenCalled();
+  });
+
+  it('proceeds when omit_unbilled_timeslips is true', async () => {
+    const invoice = { url: 'https://api.freeagent.com/v2/invoices/1' };
+    vi.mocked(mockFaClient.createInvoice).mockResolvedValue(invoice as any);
+
+    await callTool('create_invoice', {
+      contact: 'https://api.freeagent.com/v2/contacts/1',
+      project: 'https://api.freeagent.com/v2/projects/100',
+      dated_on: '2026-03-01',
+      omit_unbilled_timeslips: true,
+    });
+
+    expect(mockFaClient.listTimeslips).not.toHaveBeenCalled();
+    expect(mockFaClient.createInvoice).toHaveBeenCalled();
+    // omit_unbilled_timeslips is a tool-level flag, not a FreeAgent field — should not be forwarded.
+    const forwarded = vi.mocked(mockFaClient.createInvoice).mock.calls[0][0];
+    expect(forwarded).not.toHaveProperty('omit_unbilled_timeslips');
+  });
+
+  it('skips the check when no project or project_ids are provided', async () => {
+    const invoice = { url: 'https://api.freeagent.com/v2/invoices/1' };
+    vi.mocked(mockFaClient.createInvoice).mockResolvedValue(invoice as any);
+
+    await callTool('create_invoice', {
+      contact: 'https://api.freeagent.com/v2/contacts/1',
+      dated_on: '2026-03-01',
+    });
+
+    expect(mockFaClient.listTimeslips).not.toHaveBeenCalled();
+    expect(mockFaClient.createInvoice).toHaveBeenCalled();
+  });
+
+  it('checks every project listed in project_ids', async () => {
+    vi.mocked(mockFaClient.listTimeslips).mockImplementation(async ({ project }: any) => {
+      return project === 'https://api.freeagent.com/v2/projects/200'
+        ? [{ url: 'https://api.freeagent.com/v2/timeslips/9', dated_on: '2026-03-01', hours: '1.0' } as any]
+        : [];
+    });
+
+    const result = await callTool('create_invoice', {
+      contact: 'https://api.freeagent.com/v2/contacts/1',
+      project: 'https://api.freeagent.com/v2/projects/100',
+      project_ids: ['200'],
+      dated_on: '2026-03-01',
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.content as any)[0].text).toContain('project 200');
+  });
+
+  it('forwards normalised project_ids to the client when proceeding', async () => {
+    const invoice = { url: 'https://api.freeagent.com/v2/invoices/1' };
+    vi.mocked(mockFaClient.createInvoice).mockResolvedValue(invoice as any);
+
+    await callTool('create_invoice', {
+      contact: 'https://api.freeagent.com/v2/contacts/1',
+      project: 'https://api.freeagent.com/v2/projects/100',
+      project_ids: ['200'],
+      dated_on: '2026-03-01',
+      omit_unbilled_timeslips: true,
+    });
+
+    const forwarded = vi.mocked(mockFaClient.createInvoice).mock.calls[0][0];
+    expect(forwarded.project_ids).toEqual(['200', '100']);
   });
 });
 
@@ -462,6 +561,73 @@ describe('update_invoice', () => {
   it('returns error for invalid ID', async () => {
     const result = await callTool('update_invoice', { id: 'abc' });
     expect(result.isError).toBe(true);
+  });
+
+  it('skips the timeslip check when project_ids is not provided', async () => {
+    const invoice = { url: 'https://api.freeagent.com/v2/invoices/42' };
+    vi.mocked(mockFaClient.updateInvoice).mockResolvedValue(invoice as any);
+
+    await callTool('update_invoice', { id: '42', comments: 'Updated' });
+
+    expect(mockFaClient.listTimeslips).not.toHaveBeenCalled();
+    expect(mockFaClient.getInvoice).not.toHaveBeenCalled();
+    expect(mockFaClient.updateInvoice).toHaveBeenCalled();
+  });
+
+  it('refuses when project_ids is set and unbilled timeslips exist on the extended scope', async () => {
+    vi.mocked(mockFaClient.getInvoice).mockResolvedValue({
+      url: 'https://api.freeagent.com/v2/invoices/42',
+      project: 'https://api.freeagent.com/v2/projects/100',
+    } as any);
+    vi.mocked(mockFaClient.listTimeslips).mockImplementation(async ({ project }: any) => {
+      return project === 'https://api.freeagent.com/v2/projects/200'
+        ? [{ url: 'https://api.freeagent.com/v2/timeslips/9', dated_on: '2026-03-01', hours: '1.0' } as any]
+        : [];
+    });
+
+    const result = await callTool('update_invoice', { id: '42', project_ids: ['200'] });
+
+    expect(result.isError).toBe(true);
+    expect(mockFaClient.updateInvoice).not.toHaveBeenCalled();
+    expect((result.content as any)[0].text).toContain('project 200');
+  });
+
+  it('proceeds when project_ids is set and include_timeslips is also set', async () => {
+    const invoice = { url: 'https://api.freeagent.com/v2/invoices/42' };
+    vi.mocked(mockFaClient.getInvoice).mockResolvedValue({
+      project: 'https://api.freeagent.com/v2/projects/100',
+    } as any);
+    vi.mocked(mockFaClient.updateInvoice).mockResolvedValue(invoice as any);
+
+    await callTool('update_invoice', {
+      id: '42',
+      project_ids: ['200'],
+      include_timeslips: 'billed_grouped_by_timeslip_task',
+    });
+
+    expect(mockFaClient.listTimeslips).not.toHaveBeenCalled();
+    const forwarded = vi.mocked(mockFaClient.updateInvoice).mock.calls[0][1];
+    expect(forwarded.project_ids).toEqual(['200', '100']);
+    expect(forwarded.include_timeslips).toBe('billed_grouped_by_timeslip_task');
+  });
+
+  it('proceeds when omit_unbilled_timeslips is true on update', async () => {
+    const invoice = { url: 'https://api.freeagent.com/v2/invoices/42' };
+    vi.mocked(mockFaClient.getInvoice).mockResolvedValue({
+      project: 'https://api.freeagent.com/v2/projects/100',
+    } as any);
+    vi.mocked(mockFaClient.updateInvoice).mockResolvedValue(invoice as any);
+
+    await callTool('update_invoice', {
+      id: '42',
+      project_ids: ['200'],
+      omit_unbilled_timeslips: true,
+    });
+
+    expect(mockFaClient.listTimeslips).not.toHaveBeenCalled();
+    expect(mockFaClient.updateInvoice).toHaveBeenCalled();
+    const forwarded = vi.mocked(mockFaClient.updateInvoice).mock.calls[0][1];
+    expect(forwarded).not.toHaveProperty('omit_unbilled_timeslips');
   });
 });
 
