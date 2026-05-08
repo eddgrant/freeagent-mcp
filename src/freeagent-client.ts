@@ -59,13 +59,15 @@ export class FreeAgentClient {
     }
 
     // Every paginated FreeAgent list endpoint is fetched through this
-    // helper. The fast path (Approach A): fetch page 1, parse `last`
-    // from the Link header, fan out pages 2..last with bounded
-    // concurrency. The slow path: when Link is absent or unparseable,
-    // fall back to a sequential probe (page 2, 3, ...) until a short
-    // batch arrives. The slow path is the always-correct floor under
-    // the optimisation — better extra round-trips than silent
-    // truncation. PER_PAGE=100 is the FreeAgent API maximum.
+    // helper. We fetch page 1, parse `last` from the Link header's
+    // rel='last' segment, then fan out pages 2..last with bounded
+    // concurrency. PER_PAGE=100 is the FreeAgent API maximum.
+    //
+    // If page 1 was full but we can't extract a page count from Link,
+    // we throw rather than silently truncate. The probe found Link
+    // headers on every paginated endpoint, so this branch is a contract
+    // violation rather than an expected case — we want to find out
+    // immediately if FreeAgent ever changes that.
     private async paginatedGet<T>(
         path: string,
         key: string,
@@ -85,15 +87,12 @@ export class FreeAgentClient {
 
         const lastPage = parseLastPage(first.headers?.link);
         if (lastPage == null) {
-            // Sequential fallback — see paginateSequentialFrom comment.
-            return this.paginateSequentialFrom(path, key, baseParams, firstBatch, 2);
+            throw new Error(
+                `${path}: page 1 was full but the Link header did not include a parseable rel='last' page count. ` +
+                `Cannot determine remaining page count safely. Re-run scripts/probe-pagination.mjs to verify the API contract.`,
+            );
         }
-        if (lastPage <= 1) {
-            // Defensive: Link claims page 1 is the last, but the batch was
-            // full. Treat as done — trusting Link over the length signal here
-            // to avoid an unnecessary extra request.
-            return firstBatch;
-        }
+        if (lastPage <= 1) return firstBatch;
 
         const remainingPages = Array.from({ length: lastPage - 1 }, (_, i) => i + 2);
         const batches = await mapWithConcurrency(remainingPages, this.paginationConcurrency, async (page) => {
@@ -107,34 +106,6 @@ export class FreeAgentClient {
         for (const b of batches) out.push(...b);
         console.error(`[API] ${path}: fetched ${out.length} item(s) across ${lastPage} page(s) (concurrency=${this.paginationConcurrency})`);
         return out;
-    }
-
-    // Sequential fallback used when the Link header is missing or its
-    // rel='last' segment is unparseable. We can't determine the total
-    // page count up front, so we keep fetching page+1 until we see a
-    // short batch. Slower wall-clock than the concurrent fast path but
-    // never wrong — the contract we owe callers is "all results, full
-    // stop", and this guarantees it regardless of header behaviour.
-    private async paginateSequentialFrom<T>(
-        path: string,
-        key: string,
-        baseParams: Record<string, unknown>,
-        firstBatch: T[],
-        startPage: number,
-    ): Promise<T[]> {
-        const PER_PAGE = 100;
-        const out: T[] = [...firstBatch];
-        for (let page = startPage; ; page++) {
-            const r = await this.axiosInstance.get<Record<string, T[]>>(path, {
-                params: { ...baseParams, page, per_page: PER_PAGE },
-            });
-            const batch = r.data[key] ?? [];
-            out.push(...batch);
-            if (batch.length < PER_PAGE) {
-                console.error(`[API] ${path}: fetched ${out.length} item(s) across ${page} page(s) (sequential fallback)`);
-                return out;
-            }
-        }
     }
 
     private async refreshToken() {

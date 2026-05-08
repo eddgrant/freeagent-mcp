@@ -145,41 +145,14 @@ describe('paginated list (covers every list endpoint)', () => {
     expect(result).toHaveLength(100);
   });
 
-  it('sequential fallback: when Link header is absent and page 1 is full, probes pages 2,3,... until short', async () => {
+  it('throws (rather than silently truncating) when page 1 is full but Link rel=last is unparseable — the probe shows FreeAgent always provides it, so a missing one means a contract change we want to learn about loudly', async () => {
     const page1 = Array.from({ length: 100 }, (_, i) => ({ url: `t${i + 1}` }));
-    const page2 = Array.from({ length: 100 }, (_, i) => ({ url: `t${i + 101}` }));
-    const page3 = Array.from({ length: 47 }, (_, i) => ({ url: `t${i + 201}` }));
-    // No headers field at all: simulates a stripped/absent Link header.
-    mockGet
-      .mockResolvedValueOnce({ data: { timeslips: page1 } })
-      .mockResolvedValueOnce({ data: { timeslips: page2 } })
-      .mockResolvedValueOnce({ data: { timeslips: page3 } });
+    // No headers field at all: simulates a missing Link header (proxy
+    // strip, future API change, or an endpoint we haven't probed).
+    mockGet.mockResolvedValueOnce({ data: { timeslips: page1 } });
 
-    const result = await client.listTimeslips();
-
-    expect(mockGet).toHaveBeenCalledTimes(3);
-    expect(mockGet).toHaveBeenNthCalledWith(1, '/timeslips', { params: { page: 1, per_page: 100 } });
-    expect(mockGet).toHaveBeenNthCalledWith(2, '/timeslips', { params: { page: 2, per_page: 100 } });
-    expect(mockGet).toHaveBeenNthCalledWith(3, '/timeslips', { params: { page: 3, per_page: 100 } });
-    expect(result).toHaveLength(247);
-  });
-
-  it('sequential fallback: when Link header is present but rel=last is unparseable, falls back to sequential probing', async () => {
-    const page1 = Array.from({ length: 100 }, (_, i) => ({ url: `t${i + 1}` }));
-    const page2 = Array.from({ length: 5 }, (_, i) => ({ url: `t${i + 101}` }));
-    mockGet
-      .mockResolvedValueOnce({
-        data: { timeslips: page1 },
-        // rel='next' present, rel='last' missing — common when an endpoint
-        // doesn't know the final page count yet.
-        headers: { link: `<https://api.freeagent.com/v2/timeslips?page=2>; rel='next'` },
-      })
-      .mockResolvedValueOnce({ data: { timeslips: page2 } });
-
-    const result = await client.listTimeslips();
-
-    expect(mockGet).toHaveBeenCalledTimes(2);
-    expect(result).toHaveLength(105);
+    await expect(client.listTimeslips()).rejects.toThrow(/Link header.*rel='last'/);
+    expect(mockGet).toHaveBeenCalledTimes(1);
   });
 
   it('stops after one request when the first page is short', async () => {
@@ -220,11 +193,12 @@ describe('paginated list (covers every list endpoint)', () => {
 
   it('propagates errors mid-pagination without silently returning partial results', async () => {
     const page1 = Array.from({ length: 100 }, (_, i) => ({ url: `t${i + 1}` }));
+    const linkHeader = `<https://api.freeagent.com/v2/timeslips?page=3&per_page=100>; rel='last'`;
     mockGet
-      .mockResolvedValueOnce({ data: { timeslips: page1 } })
-      .mockRejectedValueOnce(new Error('Network error on page 2'));
+      .mockResolvedValueOnce({ data: { timeslips: page1 }, headers: { link: linkHeader } })
+      .mockRejectedValueOnce(new Error('Network error on a later page'));
 
-    await expect(client.listTimeslips()).rejects.toThrow('Network error on page 2');
+    await expect(client.listTimeslips()).rejects.toThrow('Network error on a later page');
   });
 
   it('forwards filter params on every page request', async () => {
