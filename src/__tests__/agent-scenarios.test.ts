@@ -40,7 +40,8 @@ async function callTool(name: string, args: Record<string, unknown> = {}) {
 describe('scenario: "create an invoice for projects X and Y"', () => {
     // Stand-in for the user's request being relayed by an agent. The agent
     // tries the obvious naive call first.
-    it('first call: agent issues create_invoice with project_ids, MCP detects unbilled timeslips and refuses with a menu of next steps', async () => {
+    it('first call: agent issues create_invoice with project_ids — MCP runs both refusal checks in parallel and surfaces every blocker in one response', async () => {
+        // One unbilled query per project, run in parallel.
         vi.mocked(mockFaClient.listTimeslips).mockImplementation(async ({ project }: any) => {
             if (project === 'https://api.freeagent.com/v2/projects/100') {
                 return [{ url: 'https://api.freeagent.com/v2/timeslips/1', dated_on: '2026-04-01', hours: '4.0' } as any];
@@ -50,6 +51,12 @@ describe('scenario: "create an invoice for projects X and Y"', () => {
             }
             return [];
         });
+        // Multi-project numbering inspection runs concurrently with the unbilled check.
+        vi.mocked(mockFaClient.getProject).mockImplementation(async (id: string) => {
+            if (id === '100') return { url: '...', name: 'Alpha', uses_project_invoice_sequence: true } as any;
+            if (id === '200') return { url: '...', name: 'Beta', uses_project_invoice_sequence: false } as any;
+            throw new Error('unexpected ' + id);
+        });
 
         const result = await callTool('create_invoice', {
             contact: 'https://api.freeagent.com/v2/contacts/1',
@@ -57,12 +64,12 @@ describe('scenario: "create an invoice for projects X and Y"', () => {
             dated_on: '2026-04-30',
         });
 
-        // No invoice gets created; the agent must surface the choice to the user.
+        // No invoice gets created; the agent must surface the choices to the user.
         expect(mockFaClient.createInvoice).not.toHaveBeenCalled();
         expect(result.isError).toBe(true);
 
         const text = (result.content as any)[0].text as string;
-        // The refusal must spell out exactly what was found, per project, so the
+        // The unbilled refusal must spell out what was found per project, so the
         // user can make an informed decision when the agent relays it back.
         expect(text).toContain('project 100');
         expect(text).toContain('project 200');
@@ -71,6 +78,34 @@ describe('scenario: "create an invoice for projects X and Y"', () => {
         // ...and must enumerate the two retry options the agent can take.
         expect(text).toContain('include_timeslips');
         expect(text).toContain('omit_unbilled_timeslips: true');
+        // The numbering refusal is bundled into the same response — the agent
+        // doesn't need a second round-trip to learn it must also pick a
+        // numbering source. Eligible projects (Alpha) and the org-wide
+        // sentinel are listed; ineligible 200 is excluded as a numbering option.
+        expect(text).toContain('numbering_source: "100"');
+        expect(text).toContain('Alpha');
+        expect(text).toContain('numbering_source: "org-wide"');
+        expect(text).not.toContain('numbering_source: "200"');
+    });
+
+    it('first call (single-project variant): MCP only runs the unbilled-timeslip check, since numbering is unambiguous', async () => {
+        vi.mocked(mockFaClient.listTimeslips).mockImplementation(async ({ project }: any) => {
+            return project === 'https://api.freeagent.com/v2/projects/100'
+                ? [{ url: 'https://api.freeagent.com/v2/timeslips/1', dated_on: '2026-04-01', hours: '4.0' } as any]
+                : [];
+        });
+
+        const result = await callTool('create_invoice', {
+            contact: 'https://api.freeagent.com/v2/contacts/1',
+            project_ids: ['100'],
+            dated_on: '2026-04-30',
+        });
+
+        expect(mockFaClient.createInvoice).not.toHaveBeenCalled();
+        expect(result.isError).toBe(true);
+        // The numbering inspection should not run for single-project invoices.
+        expect(mockFaClient.getProject).not.toHaveBeenCalled();
+        expect((result.content as any)[0].text).toContain('project 100');
     });
 
     it('second call: agent retries with include_timeslips but no numbering_source — MCP inspects projects and refuses with a sequence-aware menu', async () => {

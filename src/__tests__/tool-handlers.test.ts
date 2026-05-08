@@ -447,12 +447,17 @@ describe('create_invoice', () => {
     expect(mockFaClient.createInvoice).toHaveBeenCalled();
   });
 
-  it('checks every project listed in project_ids', async () => {
+  it('checks every project listed in project_ids in parallel', async () => {
     vi.mocked(mockFaClient.listTimeslips).mockImplementation(async ({ project }: any) => {
       return project === 'https://api.freeagent.com/v2/projects/200'
         ? [{ url: 'https://api.freeagent.com/v2/timeslips/9', dated_on: '2026-03-01', hours: '1.0' } as any]
         : [];
     });
+    // Numbering inspection runs in parallel with the unbilled check; stub it so
+    // the multi-project refusal isn't blocked on a missing getProject mock.
+    vi.mocked(mockFaClient.getProject).mockImplementation(async (id: string) => ({
+      url: '...', name: `P${id}`, uses_project_invoice_sequence: false,
+    }) as any);
 
     const result = await callTool('create_invoice', {
       contact: 'https://api.freeagent.com/v2/contacts/1',
@@ -461,6 +466,15 @@ describe('create_invoice', () => {
     });
 
     expect(result.isError).toBe(true);
+    // One unbilled query per project, bounded by N — avoids pulling unrelated
+    // org data and dodges silent pagination truncation on busy orgs.
+    expect(mockFaClient.listTimeslips).toHaveBeenCalledTimes(2);
+    expect(mockFaClient.listTimeslips).toHaveBeenCalledWith({
+      project: 'https://api.freeagent.com/v2/projects/100', view: 'unbilled',
+    });
+    expect(mockFaClient.listTimeslips).toHaveBeenCalledWith({
+      project: 'https://api.freeagent.com/v2/projects/200', view: 'unbilled',
+    });
     expect((result.content as any)[0].text).toContain('project 200');
   });
 

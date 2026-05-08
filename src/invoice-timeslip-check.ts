@@ -51,21 +51,23 @@ export interface UnbilledByProject {
     timeslips: Timeslip[];
 }
 
+// Issues one query per implicated project, in parallel. We deliberately
+// avoid a single org-wide `view: 'unbilled'` fetch: it would pull slips
+// from unrelated projects (wasteful at scale) and — more importantly —
+// FreeAgent paginates `/timeslips` and the client doesn't chase pages,
+// so a busy org's org-wide response would be silently truncated. Per
+// project the volume is bounded and much more likely to fit one page.
 export async function findUnbilledTimeslipsForProjects(
     client: TimeslipQuerier,
     projectUrls: string[],
 ): Promise<UnbilledByProject[]> {
-    const out: UnbilledByProject[] = [];
-    for (const projectUrl of projectUrls) {
-        const slips = await client.listTimeslips({
-            project: projectUrl,
-            view: 'unbilled',
-        });
-        if (slips.length > 0) {
-            out.push({ projectUrl, timeslips: slips });
-        }
-    }
-    return out;
+    const responses = await Promise.all(
+        projectUrls.map(projectUrl =>
+            client.listTimeslips({ project: projectUrl, view: 'unbilled' })
+                .then(timeslips => ({ projectUrl, timeslips })),
+        ),
+    );
+    return responses.filter(r => r.timeslips.length > 0);
 }
 
 // Numbering-source refusal helpers for multi-project invoices.
@@ -92,16 +94,12 @@ export async function inspectProjectsForNumbering(
     client: ProjectQuerier,
     projectIds: string[],
 ): Promise<NumberingCandidate[]> {
-    const out: NumberingCandidate[] = [];
-    for (const id of projectIds) {
-        const project = await client.getProject(id);
-        out.push({
-            id,
-            name: project.name,
-            usesProjectInvoiceSequence: project.uses_project_invoice_sequence === true,
-        });
-    }
-    return out;
+    const projects = await Promise.all(projectIds.map(id => client.getProject(id)));
+    return projects.map((project, i) => ({
+        id: projectIds[i],
+        name: project.name,
+        usesProjectInvoiceSequence: project.uses_project_invoice_sequence === true,
+    }));
 }
 
 export function formatNumberingRefusal(candidates: NumberingCandidate[]): string {

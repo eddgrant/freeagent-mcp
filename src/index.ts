@@ -19,6 +19,8 @@ import {
   inspectProjectsForNumbering,
   formatNumberingRefusal,
   formatNumberingPickIneligible,
+  type NumberingCandidate,
+  type UnbilledByProject,
 } from './invoice-timeslip-check.js';
 
 export class FreeAgentServer {
@@ -871,44 +873,48 @@ export class FreeAgentServer {
             const omitUnbilled = args.omit_unbilled_timeslips === true;
             const projectIds = input.project_ids ?? [];
 
-            // Detect-and-refuse #1: unbilled timeslips on the implicated
-            // project(s). Skipped when the caller has made an active choice
-            // via include_timeslips or omit_unbilled_timeslips.
-            if (!input.include_timeslips && !omitUnbilled && projectIds.length > 0) {
-              const projectUrls = deriveImplicatedProjectUrls({ projectIds });
-              const unbilled = await findUnbilledTimeslipsForProjects(this.client, projectUrls);
-              if (unbilled.length > 0) {
-                return {
-                  content: [{ type: 'text' as const, text: formatUnbilledRefusal(unbilled) }],
-                  isError: true,
-                };
+            // Detect-and-refuse #1 (unbilled timeslips on the implicated
+            // project(s)) and #2 (numbering source for multi-project
+            // invoices) are independent. We run both in parallel and
+            // surface every blocker in a single response so the agent
+            // can collect every decision from the user in one turn
+            // rather than one decision per round-trip.
+            //
+            // Each check is bypassed when the caller has already made an
+            // active choice for it: include_timeslips/omit_unbilled_timeslips
+            // for #1, and numbering_source="org-wide" (always valid) for #2.
+            const shouldCheckUnbilled = !input.include_timeslips && !omitUnbilled && projectIds.length > 0;
+            const shouldCheckNumbering = projectIds.length > 1 && input.numbering_source !== ORG_WIDE_NUMBERING;
+
+            const [unbilled, candidates] = await Promise.all([
+              shouldCheckUnbilled
+                ? findUnbilledTimeslipsForProjects(this.client, deriveImplicatedProjectUrls({ projectIds }))
+                : Promise.resolve([] as UnbilledByProject[]),
+              shouldCheckNumbering
+                ? inspectProjectsForNumbering(this.client, projectIds)
+                : Promise.resolve([] as NumberingCandidate[]),
+            ]);
+
+            const refusals: string[] = [];
+            if (unbilled.length > 0) {
+              refusals.push(formatUnbilledRefusal(unbilled));
+            }
+            if (shouldCheckNumbering) {
+              if (!input.numbering_source) {
+                refusals.push(formatNumberingRefusal(candidates));
+              } else {
+                const picked = candidates.find(c => c.id === input.numbering_source);
+                if (picked && !picked.usesProjectInvoiceSequence) {
+                  refusals.push(formatNumberingPickIneligible(picked, candidates));
+                }
               }
             }
 
-            // Detect-and-refuse #2: numbering source. For multi-project
-            // invoices we inspect every project's per-project-sequence
-            // setting so we can either (a) refuse with an informative menu
-            // when numbering_source is unset, or (b) refuse explicitly when
-            // the caller has picked a project that has no per-project
-            // sequence configured (FreeAgent would silently fall back to
-            // org-wide in that case, surprising the user).
-            if (projectIds.length > 1) {
-              const candidates = await inspectProjectsForNumbering(this.client, projectIds);
-              if (!input.numbering_source) {
-                return {
-                  content: [{ type: 'text' as const, text: formatNumberingRefusal(candidates) }],
-                  isError: true,
-                };
-              }
-              if (input.numbering_source !== ORG_WIDE_NUMBERING) {
-                const picked = candidates.find(c => c.id === input.numbering_source);
-                if (picked && !picked.usesProjectInvoiceSequence) {
-                  return {
-                    content: [{ type: 'text' as const, text: formatNumberingPickIneligible(picked, candidates) }],
-                    isError: true,
-                  };
-                }
-              }
+            if (refusals.length > 0) {
+              return {
+                content: [{ type: 'text' as const, text: refusals.join('\n\n---\n\n') }],
+                isError: true,
+              };
             }
 
             const wire = buildInvoicePayload(input);
