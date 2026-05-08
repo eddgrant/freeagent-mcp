@@ -31,6 +31,34 @@ export class FreeAgentClient {
         );
     }
 
+    // Every paginated FreeAgent list endpoint is fetched through this
+    // helper. We page until we see a short batch (< per_page items), which
+    // is the canonical end-of-collection signal the API guarantees. We
+    // deliberately don't rely on the Link header — it's correct, but the
+    // length check is sufficient and survives any header stripping by
+    // proxies. PER_PAGE=100 is the API maximum; using it minimises round
+    // trips on busy orgs (the probe found 700+ pages of timeslips at
+    // per_page=1, which collapses to ~8 pages at per_page=100).
+    private async paginatedGet<T>(
+        path: string,
+        key: string,
+        baseParams: Record<string, unknown> = {},
+    ): Promise<T[]> {
+        const PER_PAGE = 100;
+        const out: T[] = [];
+        for (let page = 1; ; page++) {
+            const response = await this.axiosInstance.get<Record<string, T[]>>(path, {
+                params: { ...baseParams, page, per_page: PER_PAGE },
+            });
+            const batch = response.data[key] ?? [];
+            out.push(...batch);
+            if (batch.length < PER_PAGE) {
+                console.error(`[API] ${path}: fetched ${out.length} item(s) across ${page} page(s)`);
+                return out;
+            }
+        }
+    }
+
     private async refreshToken() {
         try {
             const response = await axios.post('https://api.freeagent.com/v2/token_endpoint', {
@@ -64,8 +92,7 @@ export class FreeAgentClient {
     }): Promise<Timeslip[]> {
         try {
             console.error('[API] Fetching timeslips with params:', params);
-            const response = await this.axiosInstance.get<TimeslipsResponse>('/timeslips', { params });
-            return response.data.timeslips;
+            return await this.paginatedGet<Timeslip>('/timeslips', 'timeslips', params ?? {});
         } catch (error: any) {
             console.error('[API] Failed to fetch timeslips:', error.message);
             throw error;
@@ -185,8 +212,7 @@ export class FreeAgentClient {
     }): Promise<Project[]> {
         try {
             console.error('[API] Fetching projects with params:', params);
-            const response = await this.axiosInstance.get<ProjectsResponse>('/projects', { params });
-            return response.data.projects;
+            return await this.paginatedGet<Project>('/projects', 'projects', params ?? {});
         } catch (error: any) {
             console.error('[API] Failed to fetch projects:', error.message);
             throw error;
@@ -215,8 +241,7 @@ export class FreeAgentClient {
     }): Promise<Task[]> {
         try {
             console.error('[API] Fetching tasks with params:', params);
-            const response = await this.axiosInstance.get<TasksResponse>('/tasks', { params });
-            return response.data.tasks;
+            return await this.paginatedGet<Task>('/tasks', 'tasks', params ?? {});
         } catch (error: any) {
             console.error('[API] Failed to fetch tasks:', error.message);
             throw error;
@@ -239,8 +264,7 @@ export class FreeAgentClient {
     }): Promise<User[]> {
         try {
             console.error('[API] Fetching users with params:', params);
-            const response = await this.axiosInstance.get<UsersResponse>('/users', { params });
-            return response.data.users;
+            return await this.paginatedGet<User>('/users', 'users', params ?? {});
         } catch (error: any) {
             console.error('[API] Failed to fetch users:', error.message);
             throw error;
@@ -269,8 +293,7 @@ export class FreeAgentClient {
     }): Promise<Invoice[]> {
         try {
             console.error('[API] Fetching invoices with params:', params);
-            const response = await this.axiosInstance.get<InvoicesResponse>('/invoices', { params });
-            return response.data.invoices;
+            return await this.paginatedGet<Invoice>('/invoices', 'invoices', params ?? {});
         } catch (error: any) {
             console.error('[API] Failed to fetch invoices:', error.message);
             throw error;
@@ -337,6 +360,10 @@ export class FreeAgentClient {
         }
     }
 
+    // Intentionally not paginated: /categories returns a fixed grouped
+    // taxonomy (admin_expenses_categories, cost_of_sales_categories,
+    // income_categories, general_categories) and the API does not
+    // emit a Link header here. Verified via scripts/probe-pagination.mjs.
     async listCategories(params?: {
         sub_accounts?: boolean;
     }): Promise<CategoriesResponse> {
@@ -353,8 +380,7 @@ export class FreeAgentClient {
     async listBankAccounts(): Promise<BankAccount[]> {
         try {
             console.error('[API] Fetching bank accounts');
-            const response = await this.axiosInstance.get<BankAccountsResponse>('/bank_accounts');
-            return response.data.bank_accounts;
+            return await this.paginatedGet<BankAccount>('/bank_accounts', 'bank_accounts');
         } catch (error: any) {
             console.error('[API] Failed to fetch bank accounts:', error.message);
             throw error;
@@ -370,8 +396,7 @@ export class FreeAgentClient {
     }): Promise<BankTransaction[]> {
         try {
             console.error('[API] Fetching bank transactions with params:', params);
-            const response = await this.axiosInstance.get<BankTransactionsResponse>('/bank_transactions', { params });
-            return response.data.bank_transactions;
+            return await this.paginatedGet<BankTransaction>('/bank_transactions', 'bank_transactions', params);
         } catch (error: any) {
             console.error('[API] Failed to fetch bank transactions:', error.message);
             throw error;
@@ -386,8 +411,7 @@ export class FreeAgentClient {
     }): Promise<BankTransactionExplanation[]> {
         try {
             console.error('[API] Fetching bank transaction explanations with params:', params);
-            const response = await this.axiosInstance.get<BankTransactionExplanationsResponse>('/bank_transaction_explanations', { params });
-            return response.data.bank_transaction_explanations;
+            return await this.paginatedGet<BankTransactionExplanation>('/bank_transaction_explanations', 'bank_transaction_explanations', params);
         } catch (error: any) {
             console.error('[API] Failed to fetch bank transaction explanations:', error.message);
             throw error;
@@ -405,8 +429,7 @@ export class FreeAgentClient {
     }): Promise<Bill[]> {
         try {
             console.error('[API] Fetching bills with params:', params);
-            const response = await this.axiosInstance.get<BillsResponse>('/bills', { params });
-            return response.data.bills;
+            return await this.paginatedGet<Bill>('/bills', 'bills', params ?? {});
         } catch (error: any) {
             console.error('[API] Failed to fetch bills:', error.message);
             throw error;
