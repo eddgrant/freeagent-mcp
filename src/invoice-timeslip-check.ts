@@ -53,10 +53,9 @@ export interface UnbilledByProject {
 
 // Issues one query per implicated project, in parallel. We deliberately
 // avoid a single org-wide `view: 'unbilled'` fetch: it would pull slips
-// from unrelated projects (wasteful at scale) and — more importantly —
-// FreeAgent paginates `/timeslips` and the client doesn't chase pages,
-// so a busy org's org-wide response would be silently truncated. Per
-// project the volume is bounded and much more likely to fit one page.
+// from unrelated projects (wasteful at scale) and force the client to
+// chase many more pages than necessary on busy orgs. Scoping per project
+// keeps the volume bounded and the page count low.
 export async function findUnbilledTimeslipsForProjects(
     client: TimeslipQuerier,
     projectUrls: string[],
