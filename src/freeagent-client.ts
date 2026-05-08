@@ -1,12 +1,22 @@
 import axios, { AxiosInstance } from 'axios';
 import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectAttributes, ProjectsResponse, ProjectResponse, Task, TaskAttributes, TasksResponse, TaskResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse, InvoicePdfResponse, Category, CategoriesResponse, BankAccount, BankAccountsResponse, BankTransaction, BankTransactionsResponse, BankTransactionExplanation, BankTransactionExplanationsResponse, Bill, BillsResponse, BillResponse, ProfitAndLossSummary, ProfitAndLossSummaryResponse } from './types.js';
+import { mapWithConcurrency, parseLastPage, parseRetryAfter, readPaginationConcurrency } from './pagination.js';
 
 export class FreeAgentClient {
     private axiosInstance: AxiosInstance;
     private config: FreeAgentConfig;
+    private paginationConcurrency: number;
+
+    // Tuning knobs for 429 retry backoff. Exposed as static fields so
+    // tests can shrink them to zero without contortions; in production
+    // we want a real 1s baseline with exponential growth.
+    static retryBaseMs = 1000;
+    static retryMaxAttempts = 3;
+    static retryJitterMs = 250;
 
     constructor(config: FreeAgentConfig) {
         this.config = config;
+        this.paginationConcurrency = readPaginationConcurrency();
         this.axiosInstance = axios.create({
             baseURL: 'https://api.freeagent.com/v2',
             headers: {
@@ -15,8 +25,10 @@ export class FreeAgentClient {
             }
         });
 
-        // Refresh the OAuth token on 401 responses. The _retried flag prevents
-        // an infinite loop when the refresh token itself is invalid or expired.
+        // 401: refresh OAuth token and retry once. _retried prevents an
+        // infinite loop when the refresh token itself is invalid.
+        // 429: respect Retry-After when set, otherwise exponential backoff
+        // with jitter. _429Attempts caps total retries.
         this.axiosInstance.interceptors.response.use(
             response => response,
             async error => {
@@ -26,34 +38,100 @@ export class FreeAgentClient {
                     error.config.headers['Authorization'] = `Bearer ${this.config.accessToken}`;
                     return this.axiosInstance.request(error.config);
                 }
+                if (error.response?.status === 429) {
+                    const cfg = error.config;
+                    cfg._429Attempts = (cfg._429Attempts ?? 0) + 1;
+                    if (cfg._429Attempts > FreeAgentClient.retryMaxAttempts) {
+                        console.error(`[API] 429 after ${FreeAgentClient.retryMaxAttempts} retries — giving up`);
+                        return Promise.reject(error);
+                    }
+                    const retryAfter = parseRetryAfter(error.response.headers?.['retry-after']);
+                    const exp = FreeAgentClient.retryBaseMs * Math.pow(2, cfg._429Attempts - 1);
+                    const jitter = Math.floor(Math.random() * FreeAgentClient.retryJitterMs);
+                    const delay = (retryAfter ?? exp) + jitter;
+                    console.error(`[API] 429 received, retry ${cfg._429Attempts}/${FreeAgentClient.retryMaxAttempts} after ${delay}ms`);
+                    await new Promise(r => setTimeout(r, delay));
+                    return this.axiosInstance.request(cfg);
+                }
                 return Promise.reject(error);
             }
         );
     }
 
     // Every paginated FreeAgent list endpoint is fetched through this
-    // helper. We page until we see a short batch (< per_page items), which
-    // is the canonical end-of-collection signal the API guarantees. We
-    // deliberately don't rely on the Link header — it's correct, but the
-    // length check is sufficient and survives any header stripping by
-    // proxies. PER_PAGE=100 is the API maximum; using it minimises round
-    // trips on busy orgs (the probe found 700+ pages of timeslips at
-    // per_page=1, which collapses to ~8 pages at per_page=100).
+    // helper. The fast path (Approach A): fetch page 1, parse `last`
+    // from the Link header, fan out pages 2..last with bounded
+    // concurrency. The slow path: when Link is absent or unparseable,
+    // fall back to a sequential probe (page 2, 3, ...) until a short
+    // batch arrives. The slow path is the always-correct floor under
+    // the optimisation — better extra round-trips than silent
+    // truncation. PER_PAGE=100 is the FreeAgent API maximum.
     private async paginatedGet<T>(
         path: string,
         key: string,
         baseParams: Record<string, unknown> = {},
     ): Promise<T[]> {
         const PER_PAGE = 100;
-        const out: T[] = [];
-        for (let page = 1; ; page++) {
-            const response = await this.axiosInstance.get<Record<string, T[]>>(path, {
+        const first = await this.axiosInstance.get<Record<string, T[]>>(path, {
+            params: { ...baseParams, page: 1, per_page: PER_PAGE },
+        });
+        const firstBatch: T[] = first.data[key] ?? [];
+
+        // Fast exit: page 1 was short (or empty), so there are no more pages.
+        if (firstBatch.length < PER_PAGE) {
+            console.error(`[API] ${path}: fetched ${firstBatch.length} item(s) in 1 page`);
+            return firstBatch;
+        }
+
+        const lastPage = parseLastPage(first.headers?.link);
+        if (lastPage == null) {
+            // Sequential fallback — see paginateSequentialFrom comment.
+            return this.paginateSequentialFrom(path, key, baseParams, firstBatch, 2);
+        }
+        if (lastPage <= 1) {
+            // Defensive: Link claims page 1 is the last, but the batch was
+            // full. Treat as done — trusting Link over the length signal here
+            // to avoid an unnecessary extra request.
+            return firstBatch;
+        }
+
+        const remainingPages = Array.from({ length: lastPage - 1 }, (_, i) => i + 2);
+        const batches = await mapWithConcurrency(remainingPages, this.paginationConcurrency, async (page) => {
+            const r = await this.axiosInstance.get<Record<string, T[]>>(path, {
                 params: { ...baseParams, page, per_page: PER_PAGE },
             });
-            const batch = response.data[key] ?? [];
+            return (r.data[key] ?? []) as T[];
+        });
+
+        const out: T[] = [...firstBatch];
+        for (const b of batches) out.push(...b);
+        console.error(`[API] ${path}: fetched ${out.length} item(s) across ${lastPage} page(s) (concurrency=${this.paginationConcurrency})`);
+        return out;
+    }
+
+    // Sequential fallback used when the Link header is missing or its
+    // rel='last' segment is unparseable. We can't determine the total
+    // page count up front, so we keep fetching page+1 until we see a
+    // short batch. Slower wall-clock than the concurrent fast path but
+    // never wrong — the contract we owe callers is "all results, full
+    // stop", and this guarantees it regardless of header behaviour.
+    private async paginateSequentialFrom<T>(
+        path: string,
+        key: string,
+        baseParams: Record<string, unknown>,
+        firstBatch: T[],
+        startPage: number,
+    ): Promise<T[]> {
+        const PER_PAGE = 100;
+        const out: T[] = [...firstBatch];
+        for (let page = startPage; ; page++) {
+            const r = await this.axiosInstance.get<Record<string, T[]>>(path, {
+                params: { ...baseParams, page, per_page: PER_PAGE },
+            });
+            const batch = r.data[key] ?? [];
             out.push(...batch);
             if (batch.length < PER_PAGE) {
-                console.error(`[API] ${path}: fetched ${out.length} item(s) across ${page} page(s)`);
+                console.error(`[API] ${path}: fetched ${out.length} item(s) across ${page} page(s) (sequential fallback)`);
                 return out;
             }
         }

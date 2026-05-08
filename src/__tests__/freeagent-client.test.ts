@@ -38,6 +38,10 @@ let client: FreeAgentClient;
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(axios.create).mockReturnValue(mockAxiosInstance as any);
+  // Make 429 backoff effectively instant in tests; production defaults
+  // are restored by the constants in pagination.ts.
+  FreeAgentClient.retryBaseMs = 0;
+  FreeAgentClient.retryJitterMs = 0;
   client = new FreeAgentClient(config);
 });
 
@@ -64,10 +68,88 @@ describe('listTimeslips', () => {
 // list method. These tests exercise it via listTimeslips because the
 // behaviour is the same for every list endpoint.
 describe('paginated list (covers every list endpoint)', () => {
-  it('chases pages until a short batch is returned, concatenating results', async () => {
-    const page1 = Array.from({ length: 100 }, (_, i) => ({ url: `https://api.freeagent.com/v2/timeslips/${i + 1}` }));
-    const page2 = Array.from({ length: 100 }, (_, i) => ({ url: `https://api.freeagent.com/v2/timeslips/${i + 101}` }));
-    const page3 = Array.from({ length: 47 }, (_, i) => ({ url: `https://api.freeagent.com/v2/timeslips/${i + 201}` }));
+  // Helper to build a Link header pointing at a given last page in
+  // FreeAgent's single-quoted format, as observed via the probe.
+  function linkHeaderWithLast(lastPage: number) {
+    return `<https://api.freeagent.com/v2/timeslips?page=${lastPage}&per_page=100>; rel='last', <https://api.freeagent.com/v2/timeslips?page=2&per_page=100>; rel='next'`;
+  }
+
+  it('fast path: parses Link rel=last and fans out remaining pages concurrently, preserving order', async () => {
+    const totalPages = 5;
+    const pageOf = (n: number) =>
+      Array.from({ length: n === totalPages ? 30 : 100 }, (_, i) => ({ url: `t-${n}-${i}` }));
+
+    mockGet.mockImplementation(async (_path: string, opts: any) => {
+      const page = opts.params.page;
+      return {
+        data: { timeslips: pageOf(page) },
+        // Link header on every response, but only page 1's is consulted.
+        headers: { link: linkHeaderWithLast(totalPages) },
+      };
+    });
+
+    const result = await client.listTimeslips();
+
+    // 5 pages fetched: page 1 sequentially first, then 2..5 in fan-out.
+    expect(mockGet).toHaveBeenCalledTimes(5);
+    // Order in the concatenated result must match the page order, not the
+    // completion order.
+    expect(result).toHaveLength(4 * 100 + 30);
+    expect(result[0]).toEqual({ url: 't-1-0' });
+    expect(result[100]).toEqual({ url: 't-2-0' });
+    expect(result[400]).toEqual({ url: 't-5-0' });
+  });
+
+  it('fast path: respects the concurrency cap (default 4) on the fan-out', async () => {
+    const totalPages = 10;
+    let inFlight = 0;
+    let maxInFlight = 0;
+    let firstCall = true;
+
+    mockGet.mockImplementation(async (_path: string, opts: any) => {
+      // The page-1 request runs sequentially before the fan-out starts;
+      // it is not counted toward the concurrency observation.
+      const isFirst = firstCall;
+      firstCall = false;
+      if (!isFirst) {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+      }
+      await new Promise(r => setTimeout(r, 5));
+      if (!isFirst) inFlight--;
+
+      const page = opts.params.page;
+      const items = page === totalPages
+        ? Array.from({ length: 12 }, (_, i) => ({ url: `t-${page}-${i}` }))
+        : Array.from({ length: 100 }, (_, i) => ({ url: `t-${page}-${i}` }));
+      return { data: { timeslips: items }, headers: { link: linkHeaderWithLast(totalPages) } };
+    });
+
+    await client.listTimeslips();
+
+    // 9 remaining pages (2..10), default concurrency 4 — never more than 4 in flight.
+    expect(maxInFlight).toBeLessThanOrEqual(4);
+    expect(maxInFlight).toBeGreaterThan(1); // genuine parallelism, not sequential
+  });
+
+  it('fast path: returns immediately when Link reports last=1 even though page 1 was full', async () => {
+    const items = Array.from({ length: 100 }, (_, i) => ({ url: `t${i + 1}` }));
+    mockGet.mockResolvedValue({
+      data: { timeslips: items },
+      headers: { link: `<https://api.freeagent.com/v2/timeslips?page=1&per_page=100>; rel='last'` },
+    });
+
+    const result = await client.listTimeslips();
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(result).toHaveLength(100);
+  });
+
+  it('sequential fallback: when Link header is absent and page 1 is full, probes pages 2,3,... until short', async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ url: `t${i + 1}` }));
+    const page2 = Array.from({ length: 100 }, (_, i) => ({ url: `t${i + 101}` }));
+    const page3 = Array.from({ length: 47 }, (_, i) => ({ url: `t${i + 201}` }));
+    // No headers field at all: simulates a stripped/absent Link header.
     mockGet
       .mockResolvedValueOnce({ data: { timeslips: page1 } })
       .mockResolvedValueOnce({ data: { timeslips: page2 } })
@@ -80,6 +162,34 @@ describe('paginated list (covers every list endpoint)', () => {
     expect(mockGet).toHaveBeenNthCalledWith(2, '/timeslips', { params: { page: 2, per_page: 100 } });
     expect(mockGet).toHaveBeenNthCalledWith(3, '/timeslips', { params: { page: 3, per_page: 100 } });
     expect(result).toHaveLength(247);
+  });
+
+  it('sequential fallback: when Link header is present but rel=last is unparseable, falls back to sequential probing', async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ url: `t${i + 1}` }));
+    const page2 = Array.from({ length: 5 }, (_, i) => ({ url: `t${i + 101}` }));
+    mockGet
+      .mockResolvedValueOnce({
+        data: { timeslips: page1 },
+        // rel='next' present, rel='last' missing — common when an endpoint
+        // doesn't know the final page count yet.
+        headers: { link: `<https://api.freeagent.com/v2/timeslips?page=2>; rel='next'` },
+      })
+      .mockResolvedValueOnce({ data: { timeslips: page2 } });
+
+    const result = await client.listTimeslips();
+
+    expect(mockGet).toHaveBeenCalledTimes(2);
+    expect(result).toHaveLength(105);
+  });
+
+  it('stops after one request when the first page is short', async () => {
+    const items = [{ url: 'https://api.freeagent.com/v2/timeslips/1' }];
+    mockGet.mockResolvedValue({ data: { timeslips: items } });
+
+    const result = await client.listTimeslips();
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(items);
   });
 
   it('stops after one request when the first page is short', async () => {
@@ -485,5 +595,100 @@ describe('token refresh interceptor', () => {
     };
 
     await expect(errorHandler(error)).rejects.toEqual(error);
+  });
+});
+
+describe('429 retry interceptor', () => {
+  it('retries on 429 and resolves with the retry response', async () => {
+    const errorHandler = mockInterceptors.response.use.mock.calls[0][1];
+
+    const cfg: any = { headers: {} };
+    const error = {
+      response: { status: 429, headers: {} },
+      config: cfg,
+    };
+
+    const retryResponse = { data: { timeslips: [] } };
+    mockRequest.mockResolvedValue(retryResponse);
+
+    const result = await errorHandler(error);
+
+    expect(mockRequest).toHaveBeenCalledWith(cfg);
+    expect(cfg._429Attempts).toBe(1);
+    expect(result).toEqual(retryResponse);
+  });
+
+  it('honours the Retry-After header (delta-seconds) when present', async () => {
+    // Don't actually sleep for the value — we set the base/jitter to 0
+    // already, but Retry-After of '5' would otherwise add a 5s wait.
+    // Use a tiny value to verify the path is taken without slowing tests.
+    const errorHandler = mockInterceptors.response.use.mock.calls[0][1];
+
+    const cfg: any = { headers: {} };
+    const error = {
+      response: { status: 429, headers: { 'retry-after': '0' } },
+      config: cfg,
+    };
+
+    mockRequest.mockResolvedValue({ data: {} });
+    await errorHandler(error);
+
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+    expect(cfg._429Attempts).toBe(1);
+  });
+
+  it('caps retries at retryMaxAttempts and propagates the final 429', async () => {
+    const errorHandler = mockInterceptors.response.use.mock.calls[0][1];
+
+    // Simulate the interceptor having already retried up to the limit.
+    const cfg: any = { headers: {}, _429Attempts: FreeAgentClient.retryMaxAttempts };
+    const error = {
+      response: { status: 429, headers: {} },
+      config: cfg,
+    };
+
+    await expect(errorHandler(error)).rejects.toEqual(error);
+    expect(mockRequest).not.toHaveBeenCalled();
+  });
+
+  it('does not interfere with non-429 / non-401 errors', async () => {
+    const errorHandler = mockInterceptors.response.use.mock.calls[0][1];
+
+    const error = {
+      response: { status: 500 },
+      config: { headers: {} },
+    };
+
+    await expect(errorHandler(error)).rejects.toEqual(error);
+    expect(mockRequest).not.toHaveBeenCalled();
+  });
+
+  it('uses exponential backoff in the absence of Retry-After', async () => {
+    // Restore a non-zero baseline for this single test so we can verify
+    // the doubling behaviour deterministically.
+    FreeAgentClient.retryBaseMs = 10;
+    FreeAgentClient.retryJitterMs = 0;
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+
+    const errorHandler = mockInterceptors.response.use.mock.calls[0][1];
+
+    mockRequest.mockResolvedValue({ data: {} });
+
+    // Attempt 1: base * 2^0 = 10ms
+    const cfg1: any = { headers: {} };
+    await errorHandler({ response: { status: 429, headers: {} }, config: cfg1 });
+    // Attempt 2: base * 2^1 = 20ms
+    const cfg2: any = { headers: {}, _429Attempts: 1 };
+    await errorHandler({ response: { status: 429, headers: {} }, config: cfg2 });
+    // Attempt 3: base * 2^2 = 40ms
+    const cfg3: any = { headers: {}, _429Attempts: 2 };
+    await errorHandler({ response: { status: 429, headers: {} }, config: cfg3 });
+
+    const delays = setTimeoutSpy.mock.calls.map(c => c[1]);
+    expect(delays).toContain(10);
+    expect(delays).toContain(20);
+    expect(delays).toContain(40);
+
+    setTimeoutSpy.mockRestore();
   });
 });
