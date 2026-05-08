@@ -69,7 +69,7 @@ describe('findUnbilledTimeslipsForProjects', () => {
     };
   }
 
-  it('queries each project with view=unbilled and returns only those with results', async () => {
+  it('queries each project with view=unbilled in parallel and returns only those with results', async () => {
     const client = makeClient({
       'https://api.freeagent.com/v2/projects/100': [
         { url: 'https://api.freeagent.com/v2/timeslips/1', dated_on: '2026-04-01', hours: '1.0' } as any,
@@ -87,6 +87,30 @@ describe('findUnbilledTimeslipsForProjects', () => {
       project: 'https://api.freeagent.com/v2/projects/100',
       view: 'unbilled',
     });
+    expect(client.listTimeslips).toHaveBeenCalledWith({
+      project: 'https://api.freeagent.com/v2/projects/200',
+      view: 'unbilled',
+    });
+  });
+
+  it('issues per-project queries concurrently rather than sequentially', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const client = {
+      listTimeslips: vi.fn(async () => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise(r => setTimeout(r, 5));
+        inFlight--;
+        return [];
+      }),
+    };
+    await findUnbilledTimeslipsForProjects(client as any, [
+      'https://api.freeagent.com/v2/projects/100',
+      'https://api.freeagent.com/v2/projects/200',
+      'https://api.freeagent.com/v2/projects/300',
+    ]);
+    expect(maxInFlight).toBeGreaterThan(1);
   });
 
   it('returns an empty array when no project has unbilled timeslips', async () => {
