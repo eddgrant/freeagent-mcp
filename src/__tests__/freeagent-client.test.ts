@@ -42,20 +42,89 @@ beforeEach(() => {
 });
 
 describe('listTimeslips', () => {
-  it('calls GET /timeslips with params and unwraps response', async () => {
+  it('calls GET /timeslips with caller params plus pagination and unwraps response', async () => {
     const timeslips = [{ url: 'https://api.freeagent.com/v2/timeslips/1' }];
     mockGet.mockResolvedValue({ data: { timeslips } });
 
     const params = { from_date: '2026-03-01', to_date: '2026-03-31' };
     const result = await client.listTimeslips(params);
 
-    expect(mockGet).toHaveBeenCalledWith('/timeslips', { params });
+    // Caller params are forwarded alongside page/per_page on every request.
+    expect(mockGet).toHaveBeenCalledWith('/timeslips', { params: { ...params, page: 1, per_page: 100 } });
     expect(result).toEqual(timeslips);
   });
 
   it('re-throws on API error', async () => {
     mockGet.mockRejectedValue(new Error('Network error'));
     await expect(client.listTimeslips()).rejects.toThrow('Network error');
+  });
+});
+
+// Pagination is implemented once in a private helper used by every
+// list method. These tests exercise it via listTimeslips because the
+// behaviour is the same for every list endpoint.
+describe('paginated list (covers every list endpoint)', () => {
+  it('chases pages until a short batch is returned, concatenating results', async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ url: `https://api.freeagent.com/v2/timeslips/${i + 1}` }));
+    const page2 = Array.from({ length: 100 }, (_, i) => ({ url: `https://api.freeagent.com/v2/timeslips/${i + 101}` }));
+    const page3 = Array.from({ length: 47 }, (_, i) => ({ url: `https://api.freeagent.com/v2/timeslips/${i + 201}` }));
+    mockGet
+      .mockResolvedValueOnce({ data: { timeslips: page1 } })
+      .mockResolvedValueOnce({ data: { timeslips: page2 } })
+      .mockResolvedValueOnce({ data: { timeslips: page3 } });
+
+    const result = await client.listTimeslips();
+
+    expect(mockGet).toHaveBeenCalledTimes(3);
+    expect(mockGet).toHaveBeenNthCalledWith(1, '/timeslips', { params: { page: 1, per_page: 100 } });
+    expect(mockGet).toHaveBeenNthCalledWith(2, '/timeslips', { params: { page: 2, per_page: 100 } });
+    expect(mockGet).toHaveBeenNthCalledWith(3, '/timeslips', { params: { page: 3, per_page: 100 } });
+    expect(result).toHaveLength(247);
+  });
+
+  it('stops after one request when the first page is short', async () => {
+    const items = [{ url: 'https://api.freeagent.com/v2/timeslips/1' }];
+    mockGet.mockResolvedValue({ data: { timeslips: items } });
+
+    const result = await client.listTimeslips();
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(items);
+  });
+
+  it('returns an empty array when the first page is empty', async () => {
+    mockGet.mockResolvedValue({ data: { timeslips: [] } });
+
+    const result = await client.listTimeslips();
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([]);
+  });
+
+  it('treats a missing collection key as empty (single page)', async () => {
+    mockGet.mockResolvedValue({ data: {} });
+    const result = await client.listTimeslips();
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([]);
+  });
+
+  it('propagates errors mid-pagination without silently returning partial results', async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ url: `t${i + 1}` }));
+    mockGet
+      .mockResolvedValueOnce({ data: { timeslips: page1 } })
+      .mockRejectedValueOnce(new Error('Network error on page 2'));
+
+    await expect(client.listTimeslips()).rejects.toThrow('Network error on page 2');
+  });
+
+  it('forwards filter params on every page request', async () => {
+    mockGet.mockResolvedValue({ data: { timeslips: [{ url: 't1' }] } });
+
+    await client.listTimeslips({ view: 'unbilled', project: 'https://api.freeagent.com/v2/projects/100' });
+
+    expect(mockGet).toHaveBeenCalledWith('/timeslips', {
+      params: { view: 'unbilled', project: 'https://api.freeagent.com/v2/projects/100', page: 1, per_page: 100 },
+    });
   });
 });
 
@@ -177,7 +246,7 @@ describe('listProjects', () => {
 
     const result = await client.listProjects({ view: 'active' });
 
-    expect(mockGet).toHaveBeenCalledWith('/projects', { params: { view: 'active' } });
+    expect(mockGet).toHaveBeenCalledWith('/projects', { params: { view: 'active', page: 1, per_page: 100 } });
     expect(result).toEqual(projects);
   });
 });
@@ -208,7 +277,7 @@ describe('listTasks', () => {
 
     const result = await client.listTasks({ project: 'https://api.freeagent.com/v2/projects/1' });
 
-    expect(mockGet).toHaveBeenCalledWith('/tasks', { params: { project: 'https://api.freeagent.com/v2/projects/1' } });
+    expect(mockGet).toHaveBeenCalledWith('/tasks', { params: { project: 'https://api.freeagent.com/v2/projects/1', page: 1, per_page: 100 } });
     expect(result).toEqual(tasks);
   });
 });
@@ -232,7 +301,7 @@ describe('listUsers', () => {
 
     const result = await client.listUsers({ view: 'active' });
 
-    expect(mockGet).toHaveBeenCalledWith('/users', { params: { view: 'active' } });
+    expect(mockGet).toHaveBeenCalledWith('/users', { params: { view: 'active', page: 1, per_page: 100 } });
     expect(result).toEqual(users);
   });
 });
@@ -257,7 +326,7 @@ describe('listInvoices', () => {
 
     const result = await client.listInvoices({ view: 'draft' });
 
-    expect(mockGet).toHaveBeenCalledWith('/invoices', { params: { view: 'draft' } });
+    expect(mockGet).toHaveBeenCalledWith('/invoices', { params: { view: 'draft', page: 1, per_page: 100 } });
     expect(result).toEqual(invoices);
   });
 });
