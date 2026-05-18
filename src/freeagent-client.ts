@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectAttributes, ProjectsResponse, ProjectResponse, Task, TaskAttributes, TasksResponse, TaskResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse, InvoicePdfResponse, Category, CategoriesResponse, BankAccount, BankAccountsResponse, BankTransaction, BankTransactionsResponse, BankTransactionExplanation, BankTransactionExplanationsResponse, Bill, BillsResponse, BillResponse, ProfitAndLossSummary, ProfitAndLossSummaryResponse } from './types.js';
+import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectAttributes, ProjectsResponse, ProjectResponse, Task, TaskAttributes, TasksResponse, TaskResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse, InvoicePdfResponse, Category, CategoriesResponse, BankAccount, BankAccountResponse, BankAccountsResponse, BankTransaction, BankTransactionResponse, BankTransactionsResponse, BankTransactionExplanation, BankTransactionExplanationCreatePayload, BankTransactionExplanationResponse, BankTransactionExplanationsResponse, Bill, BillsResponse, BillResponse, ProfitAndLossSummary, ProfitAndLossSummaryResponse } from './types.js';
 import { mapWithConcurrency, parseLastPage, parseRetryAfter, readPaginationConcurrency } from './pagination.js';
 
 export class FreeAgentClient {
@@ -436,6 +436,17 @@ export class FreeAgentClient {
         }
     }
 
+    async getBankAccount(id: string): Promise<BankAccount> {
+        try {
+            console.error('[API] Fetching bank account:', id);
+            const response = await this.axiosInstance.get<BankAccountResponse>(`/bank_accounts/${id}`);
+            return response.data.bank_account;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch bank account:', error.message);
+            throw error;
+        }
+    }
+
     async listBankTransactions(params: {
         bank_account: string;
         from_date?: string;
@@ -452,6 +463,17 @@ export class FreeAgentClient {
         }
     }
 
+    async getBankTransaction(id: string): Promise<BankTransaction> {
+        try {
+            console.error('[API] Fetching bank transaction:', id);
+            const response = await this.axiosInstance.get<BankTransactionResponse>(`/bank_transactions/${id}`);
+            return response.data.bank_transaction;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch bank transaction:', error.message);
+            throw error;
+        }
+    }
+
     async listBankTransactionExplanations(params: {
         bank_account: string;
         from_date?: string;
@@ -463,6 +485,29 @@ export class FreeAgentClient {
             return await this.paginatedGet<BankTransactionExplanation>('/bank_transaction_explanations', 'bank_transaction_explanations', params);
         } catch (error: any) {
             console.error('[API] Failed to fetch bank transaction explanations:', error.message);
+            throw error;
+        }
+    }
+
+    async createBankTransactionExplanation(
+        payload: BankTransactionExplanationCreatePayload,
+    ): Promise<BankTransactionExplanation> {
+        try {
+            // Avoid logging the attachment payload — it could be a 5 MB
+            // base64 blob and would drown the rest of the log.
+            const { attachment, ...loggable } = payload;
+            const attachmentSummary = attachment
+                ? { file_name: attachment.file_name, content_type: attachment.content_type, bytes: attachment.data.length }
+                : undefined;
+            console.error('[API] Creating bank transaction explanation:', { ...loggable, attachment: attachmentSummary });
+
+            const response = await this.axiosInstance.post<BankTransactionExplanationResponse>(
+                '/bank_transaction_explanations',
+                { bank_transaction_explanation: payload },
+            );
+            return response.data.bank_transaction_explanation;
+        } catch (error: any) {
+            console.error('[API] Failed to create bank transaction explanation:', error.message);
             throw error;
         }
     }

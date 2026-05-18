@@ -5,13 +5,28 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import {
   CallToolRequestSchema,
   ErrorCode,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { FreeAgentClient } from './freeagent-client.js';
 import { TimeslipAttributes, InvoiceAttributes, ProjectAttributes } from './types.js';
 import { validateId, validateTimeslipAttributes, validateInvoiceItemAttributes, validateInvoiceAttributes, validateProjectAttributes, validateTaskAttributes, normaliseProjectIds, normaliseNumberingSource, buildInvoicePayload, ORG_WIDE_NUMBERING } from './validation.js';
-import { installLifecycleHandlers } from './lifecycle.js';
+import { installLifecycleHandlers, type Closable } from './lifecycle.js';
+import { setupStaging, cleanupStaging, type StagingState } from './evidence-staging.js';
+import { stageEvidence, ALLOWED_CONTENT_TYPES } from './stage-evidence.js';
+import { aggregatePatterns } from './explanation-patterns.js';
+import { buildProposals } from './propose-reconciliations.js';
+import { applyExplanations } from './apply-reconciliations.js';
+import {
+  buildReconcilePromptBody,
+  PROMPT_NAME as RECONCILE_PROMPT_NAME,
+  PROMPT_DESCRIPTION as RECONCILE_PROMPT_DESCRIPTION,
+  PROMPT_ARGUMENTS as RECONCILE_PROMPT_ARGUMENTS,
+  type ReconcilePromptArgs,
+} from './prompts/reconcile.js';
+import type { Evidence, ExplanationToApply } from './types.js';
 import {
   deriveImplicatedProjectUrls,
   findUnbilledTimeslipsForProjects,
@@ -23,11 +38,19 @@ import {
   type UnbilledByProject,
 } from './invoice-timeslip-check.js';
 
+export interface FreeAgentServerOptions {
+  /** Override evidence staging state. Default: setupStaging() runs and
+   *  creates a real session subdirectory. Tests pass an opt-out state
+   *  ({ ready: false, ... }) to avoid filesystem side effects. */
+  stagingState?: StagingState;
+}
+
 export class FreeAgentServer {
   private server: Server;
   private client: FreeAgentClient;
+  private stagingState: StagingState;
 
-  constructor(client?: FreeAgentClient) {
+  constructor(client?: FreeAgentClient, options?: FreeAgentServerOptions) {
     console.error('[Setup] Initializing FreeAgent MCP server...');
 
     if (client) {
@@ -50,6 +73,8 @@ export class FreeAgentServer {
       });
     }
 
+    this.stagingState = options?.stagingState ?? setupStaging();
+
     this.server = new Server(
       {
         name: 'freeagent-mcp',
@@ -58,14 +83,25 @@ export class FreeAgentServer {
       {
         capabilities: {
           tools: {},
+          prompts: {},
         },
       }
     );
 
     this.setupToolHandlers();
+    this.setupPromptHandlers();
 
     this.server.onerror = (error) => console.error('[MCP Error]', error);
-    installLifecycleHandlers({ server: this.server });
+
+    // Wrap server.close so cleanup runs as part of the existing shutdown
+    // path. Order: clean up staging dir first, then close the MCP server.
+    const closableWithStaging: Closable = {
+      close: async () => {
+        cleanupStaging(this.stagingState);
+        await this.server.close();
+      },
+    };
+    installLifecycleHandlers({ server: closableWithStaging });
   }
 
   private setupToolHandlers() {
@@ -581,6 +617,79 @@ export class FreeAgentServer {
             },
             required: ['timeslips']
           }
+        },
+        {
+          name: 'stage_evidence',
+          description:
+            'Stage a single evidence file in the session staging directory for later attachment ' +
+            'to a reconciliation. Accepts base64 bytes (≤5 MB) and returns the on-disk path to ' +
+            'pass into apply_reconciliations. Use once per attachment immediately before calling ' +
+            'apply_reconciliations — bytes pass through model context only during this call. ' +
+            'Requires the shared evidence volume to be mounted; returns ' +
+            '{ ok: false, error: { code: "staging_volume_not_mounted" } } if not. ' +
+            'Returns a structured { ok: true | false, ... } result; never throws for business-logic errors.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              data: { type: 'string', description: 'Base64-encoded file bytes (≤5 MB decoded).' },
+              file_name: { type: 'string', description: 'Suggested filename. Server sanitises and prefixes with a random suffix to avoid collisions.' },
+              content_type: {
+                type: 'string',
+                description: 'MIME type. Must be one of: image/jpeg, image/png, image/gif, application/pdf. Magic bytes are verified against this claim.',
+                enum: [...ALLOWED_CONTENT_TYPES],
+              },
+            },
+            required: ['data', 'file_name', 'content_type'],
+          },
+        },
+        {
+          name: 'apply_reconciliations',
+          description:
+            'Apply a batch of approved reconciliations to FreeAgent. Best-effort: each ' +
+            'explanation is processed independently and reported in the result map ' +
+            '(posted/skipped/failed). Idempotent against re-runs via per-explanation ' +
+            '`idempotency_key` (sha256 of canonical fields including description) — replayed ' +
+            'calls match existing explanations and skip with `duplicate_of_existing_explanation`. ' +
+            'ALWAYS REQUIRE EXPLICIT USER APPROVAL BEFORE CALLING. FreeAgent has no draft state — ' +
+            'a posted explanation in a closed VAT period cannot be deleted via the API. ' +
+            'V1 SCOPE: refuses foreign-currency, transfers, refunds (these go in `failed[]`).',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              explanations: {
+                type: 'array',
+                description: 'Up to 100 ExplanationToApply objects. Each carries the bank_transaction URL, dated_on, gross_value, category | paid_bill | paid_invoice, optional VAT/project/description, optional attachment.evidence_path (must be under the session staging dir from propose_reconciliations.staging.path), optional marked_for_review (default true if confidence <0.9), and a stable idempotency_key (sha256 hex over canonical JSON of bank_transaction|gross_value|dated_on|one_of(category,paid_bill,paid_invoice)|description).',
+                items: { type: 'object' },
+              },
+            },
+            required: ['explanations'],
+          },
+        },
+        {
+          name: 'propose_reconciliations',
+          description:
+            'Propose reconciliations for unexplained bank transactions on a given account and date range. ' +
+            'Read-only — does NOT write to FreeAgent. Returns proposals with category/VAT/project pre-filled ' +
+            'based on the user\'s prior reconciliation history (recurring payments are detected and flagged ' +
+            'as high-confidence). Pass `evidence` collected from external search MCPs to refine confidence ' +
+            'and seed attachments on matching transactions. Inter-account transfers and likely refunds are ' +
+            'detected from history and surfaced in `notes[]` rather than proposed (deferred to v1.x). ' +
+            'V1 SCOPE: same-currency expenses only.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              bank_account: { type: 'string', description: 'Bank account URL (e.g. https://api.freeagent.com/v2/bank_accounts/123) or numeric ID.' },
+              from_date: { type: 'string', description: 'Inclusive start date (YYYY-MM-DD).' },
+              to_date: { type: 'string', description: 'Inclusive end date (YYYY-MM-DD).' },
+              evidence: {
+                type: 'array',
+                description: 'Optional list of Evidence objects gathered from external search MCPs. Each carries source, ref_id, file_name, content_type, and an extracted bag (dated_on, gross_value, etc.). Re-call propose_reconciliations with this populated to see refined proposals + match_confidence on each evidence item.',
+                items: { type: 'object' },
+              },
+              limit: { type: 'number', description: 'Max unexplained transactions to consider. Default 50, capped at 200. The response sets `truncated: true` if more existed.' },
+            },
+            required: ['bank_account', 'from_date', 'to_date'],
+          },
         }
       ],
     }));
@@ -986,6 +1095,114 @@ export class FreeAgentServer {
             };
           }
 
+          case 'stage_evidence': {
+            const args = request.params.arguments as {
+              data?: unknown;
+              file_name?: unknown;
+              content_type?: unknown;
+            };
+            // Light schema-guard. The MCP SDK validates required+type, but
+            // a defensive cast here avoids passing garbage to the pure
+            // staging function and producing a less actionable error.
+            if (typeof args?.data !== 'string' || typeof args?.file_name !== 'string' || typeof args?.content_type !== 'string') {
+              const body = { ok: false as const, error: { code: 'invalid_arguments', message: 'data, file_name, content_type are required strings' } };
+              return { content: [{ type: 'text' as const, text: JSON.stringify(body, null, 2) }] };
+            }
+            const outcome = stageEvidence(
+              { data: args.data, file_name: args.file_name, content_type: args.content_type },
+              { sessionPath: this.stagingState.sessionPath },
+            );
+            const body = outcome.ok
+              ? { ok: true as const, ...outcome.result }
+              : { ok: false as const, error: outcome.error };
+            return { content: [{ type: 'text' as const, text: JSON.stringify(body, null, 2) }] };
+          }
+
+          case 'apply_reconciliations': {
+            const args = request.params.arguments as { explanations?: unknown };
+            if (!Array.isArray(args.explanations)) {
+              return structuredError('invalid_arguments', '`explanations` must be an array of ExplanationToApply objects.');
+            }
+            if (args.explanations.length === 0) {
+              return structuredError('invalid_arguments', '`explanations` must contain at least one item.');
+            }
+            if (args.explanations.length > 100) {
+              return structuredError('invalid_arguments', `Batch too large: ${args.explanations.length} > 100. Split into smaller calls.`);
+            }
+            const explanations = args.explanations as ExplanationToApply[];
+            const result = await applyExplanations(explanations, this.client, {
+              stagingPath: this.stagingState.sessionPath,
+            });
+            return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+          }
+
+          case 'propose_reconciliations': {
+            const args = request.params.arguments as {
+              bank_account?: unknown;
+              from_date?: unknown;
+              to_date?: unknown;
+              evidence?: unknown;
+              limit?: unknown;
+            };
+            const accountId = extractBankAccountId(args.bank_account);
+            if (!accountId) {
+              return structuredError('invalid_arguments', 'bank_account must be a numeric ID or a /bank_accounts/<id> URL.');
+            }
+            if (typeof args.from_date !== 'string' || typeof args.to_date !== 'string') {
+              return structuredError('invalid_arguments', 'from_date and to_date must be YYYY-MM-DD strings.');
+            }
+            const limit = clampLimit(args.limit, 50, 200);
+
+            const account = await this.client.getBankAccount(accountId);
+
+            const unexplained = await this.client.listBankTransactions({
+              bank_account: account.url,
+              from_date: args.from_date,
+              to_date: args.to_date,
+              view: 'unexplained',
+            });
+
+            // 12 months of explained-history seeds the merchant patterns.
+            const historyFromDate = subtractMonths(args.from_date, 12);
+            const explained = await this.client.listBankTransactions({
+              bank_account: account.url,
+              from_date: historyFromDate,
+              to_date: args.to_date,
+              view: 'explained',
+            });
+            const patterns = aggregatePatterns(explained);
+
+            const truncated = unexplained.length > limit;
+            const txnsToPropose = unexplained.slice(0, limit);
+
+            const evidenceArr = Array.isArray(args.evidence) ? (args.evidence as Evidence[]) : [];
+
+            const { proposals, notes } = buildProposals({
+              unexplainedTransactions: txnsToPropose,
+              patterns,
+              evidence: evidenceArr,
+              accountCurrency: account.currency,
+            });
+
+            const explanationsSeen = explained.reduce(
+              (s, t) => s + (t.bank_transaction_explanations?.length ?? 0),
+              0,
+            );
+
+            const body = {
+              proposals,
+              truncated,
+              staging: {
+                ready: this.stagingState.ready,
+                path: this.stagingState.sessionPath,
+                ...(this.stagingState.reason ? { reason: this.stagingState.reason } : {}),
+              },
+              notes,
+              history_coverage: { months_analysed: 12, explanations_seen: explanationsSeen },
+            };
+            return { content: [{ type: 'text' as const, text: JSON.stringify(body, null, 2) }] };
+          }
+
           default:
             throw new McpError(
               ErrorCode.MethodNotFound,
@@ -1002,12 +1219,71 @@ export class FreeAgentServer {
     });
   }
 
+  private setupPromptHandlers() {
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+      prompts: [
+        {
+          name: RECONCILE_PROMPT_NAME,
+          description: RECONCILE_PROMPT_DESCRIPTION,
+          arguments: RECONCILE_PROMPT_ARGUMENTS,
+        },
+      ],
+    }));
+
+    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      if (request.params.name !== RECONCILE_PROMPT_NAME) {
+        throw new McpError(ErrorCode.MethodNotFound, `Unknown prompt: ${request.params.name}`);
+      }
+      const args = (request.params.arguments ?? {}) as ReconcilePromptArgs;
+      const body = buildReconcilePromptBody(this.stagingState, args);
+      return {
+        description: RECONCILE_PROMPT_DESCRIPTION,
+        messages: [
+          { role: 'user', content: { type: 'text', text: body } },
+        ],
+      };
+    });
+  }
+
   async run(transport?: Transport) {
     const t = transport ?? new StdioServerTransport();
     await this.server.connect(t);
     console.error('FreeAgent MCP server running on stdio');
   }
 }
+
+// Helpers used by the reconciliation tool handlers. Exported (via internal
+// re-export below) so unit tests can exercise them without spinning up a
+// full MCP server. Kept as plain functions because they hold no state.
+
+function extractBankAccountId(input: unknown): string | null {
+  if (typeof input !== 'string' || input.length === 0) return null;
+  if (/^\d+$/.test(input)) return input;
+  const m = input.match(/\/bank_accounts\/(\d+)/);
+  return m ? m[1] : null;
+}
+
+function clampLimit(input: unknown, defaultValue: number, max: number): number {
+  if (typeof input !== 'number' || !Number.isFinite(input) || input <= 0) return defaultValue;
+  return Math.min(Math.floor(input), max);
+}
+
+function subtractMonths(dateStr: string, months: number): string {
+  const d = new Date(dateStr);
+  d.setMonth(d.getMonth() - months);
+  return d.toISOString().slice(0, 10);
+}
+
+function structuredError(code: string, message: string) {
+  return {
+    content: [{
+      type: 'text' as const,
+      text: JSON.stringify({ ok: false, error: { code, message } }, null, 2),
+    }],
+  };
+}
+
+export const __test = { extractBankAccountId, clampLimit, subtractMonths };
 
 // Only run when executed directly (not when imported by tests)
 const isDirectRun = process.argv[1] &&
