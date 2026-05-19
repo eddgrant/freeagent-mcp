@@ -37,6 +37,20 @@ Forked from [markpitt/freeagent-mcp](https://github.com/markpitt/freeagent-mcp).
 - "Show me the categorised breakdown of outgoings for my current account"
 - "What are my FreeAgent nominal categories?"
 
+### Reconciliation
+Type `/mcp__freeagent__reconcile` in Claude Code to start an end-to-end reconciliation flow with explicit user-approval gates. Or just ask:
+
+- "Reconcile my Starling business account for April."
+- "Propose reconciliations for unexplained transactions on the current account, last 30 days, then I'll review."
+
+The flow:
+
+1. `propose_reconciliations` (read-only) returns proposals with category, VAT, and project pre-filled from your reconciliation history. Recurring payments (Netflix, insurance, etc.) are detected and flagged at high confidence. Inter-account transfers and likely refunds are surfaced in `notes[]` rather than proposed (deferred to a future version).
+2. If the agent has access to email/document search MCPs (Gmail, Drive, etc.) and you authorise their use, it can find supporting receipts and re-call `propose_reconciliations` with the evidence to refine confidence.
+3. After your explicit approval, `stage_evidence` writes any approved attachment to the session staging directory and `apply_reconciliations` posts each explanation to FreeAgent — best-effort, with idempotency keys protecting against duplicate writes on retry.
+
+**Attachments are opt-in** — they require a shared filesystem volume between your host and the Docker container (see [Optional: enable receipt attachments](#optional-enable-receipt-attachments) below). Reconciliations without attachments work without it; only the attachment step is gated.
+
 ### Projects & Tasks
 - "Set up a new project for Client Foo with a day rate of £123"
 - "Create a billable task called 'Consultancy' on the Foo project"
@@ -111,6 +125,94 @@ docker build -t freeagent-mcp .
 
 Then replace `eddgrant/freeagent-mcp` with `freeagent-mcp` in the MCP settings above.
 
+### Optional: enable receipt attachments
+
+Attaching evidence files (PDF/JPEG/PNG receipts) to reconciliations needs a shared filesystem volume between your host and the Docker container. The volume is the channel through which the agent hands bytes to the FreeAgent MCP without round-tripping them through the model's context window.
+
+Skip this if you only want category-only reconciliations or `paid_bill` linking — those work without the volume.
+
+**One-time setup:**
+
+```bash
+# Create the staging directory on the host. IMPORTANT: do this BEFORE
+# the first container run. If the directory doesn't exist when Docker
+# mounts it, Docker creates it as root and the container (running as
+# your user) won't be able to write to it.
+mkdir -p /tmp/freeagent-mcp
+```
+
+If you've already hit that ownership trap, fix it once with:
+
+```bash
+sudo chown -R "$USER" /tmp/freeagent-mcp
+```
+
+**MCP config additions** — three extra args to your `docker run` invocation:
+
+```jsonc
+{
+  "mcpServers": {
+    "freeagent": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--user", "1000:1000",                                  // run as your host UID:GID
+        "-v", "/tmp/freeagent-mcp:/tmp/freeagent-mcp",          // shared staging dir
+        "-e", "FREEAGENT_EVIDENCE_BASE",                        // tells the server where it lives
+        "-e", "FREEAGENT_CLIENT_ID",
+        "-e", "FREEAGENT_CLIENT_SECRET",
+        "-e", "FREEAGENT_ACCESS_TOKEN",
+        "-e", "FREEAGENT_REFRESH_TOKEN",
+        "eddgrant/freeagent-mcp"
+      ],
+      "env": {
+        "FREEAGENT_EVIDENCE_BASE": "/tmp/freeagent-mcp",
+        "FREEAGENT_CLIENT_ID": "...",
+        "FREEAGENT_CLIENT_SECRET": "...",
+        "FREEAGENT_ACCESS_TOKEN": "...",
+        "FREEAGENT_REFRESH_TOKEN": "..."
+      }
+    }
+  }
+}
+```
+
+Replace `1000:1000` with the output of `id -u`:`id -g` on your host. The path can be anything writable by your user — `/tmp/freeagent-mcp`, `~/.cache/freeagent-mcp`, etc. — but it must be the same on both sides of the `-v` mount.
+
+A per-session subdirectory is created inside `FREEAGENT_EVIDENCE_BASE` at startup and removed on shutdown; stale subdirectories from previous runs are auto-reaped after 24 hours, so you never need to clean up manually. See [`SECURITY.md`](./SECURITY.md) for the threat model around evidence handling.
+
+**How to tell it's working:** call the `propose_reconciliations` tool. The response includes a `staging` field:
+- `{ "ready": true, "path": "/tmp/freeagent-mcp/<session-id>" }` — attachments will work.
+- `{ "ready": false, "path": null, "reason": "..." }` — attachments will be skipped with `staging_volume_not_mounted`. Reconciliation itself still posts.
+
+### Testing a pre-release image interactively
+
+When a PR builds an image (e.g. `eddgrant/freeagent-mcp:pr-42`) and you want to actually use it from a Claude Code session — without polluting your normal `~/.claude/settings.json` and without losing your stable MCP setup — use:
+
+```bash
+./scripts/test-image.sh pr-42
+```
+
+This creates a self-contained temp directory with:
+- a project-scoped `.mcp.json` pointing at the image, server-named `freeagent_test` so it doesn't collide with your real `freeagent` server
+- a pre-created `evidence/` staging directory mounted into the container at the same path on both sides
+- a `CLAUDE.md` that Claude Code auto-loads, containing a smoke-test checklist
+
+The script prints `cd <temp-dir> && claude` for you to run. Credentials pass through from your shell via bare `-e VAR` flags — nothing is written to disk. When you're done, `rm -rf` the temp dir.
+
+```bash
+./scripts/test-image.sh                       # latest from Docker Hub
+./scripts/test-image.sh sha-abc1234           # specific commit
+./scripts/test-image.sh --image fa-dev        # local image (skips Docker Hub prefix)
+./scripts/test-image.sh pr-42 --no-staging    # test the unmounted-volume code path
+```
+
+The reconcile prompt is invoked via `/mcp__freeagent_test__reconcile` in that session.
+
+Required env vars in your shell: `FREEAGENT_CLIENT_ID`, `FREEAGENT_CLIENT_SECRET`, `FREEAGENT_ACCESS_TOKEN`, `FREEAGENT_REFRESH_TOKEN`.
+
 ## Tools Reference
 
 | Tool                                 | Description                                                                           |
@@ -143,6 +245,15 @@ Then replace `eddgrant/freeagent-mcp` with `freeagent-mcp` in the MCP settings a
 | `list_tasks`                         | List tasks, optionally filtered by project                                            |
 | `list_users`                         | List users in the organisation                                                        |
 | `get_current_user`                   | Get the currently authenticated user                                                  |
+| `propose_reconciliations`            | Read-only: propose reconciliations for unexplained transactions, history-aware        |
+| `stage_evidence`                     | Stage a base64 evidence file in the session staging dir for later attachment          |
+| `apply_reconciliations`              | Best-effort batch write of approved reconciliations (with idempotency keys)            |
+
+## Prompts
+
+| Prompt                          | Description                                                                       |
+|---------------------------------|-----------------------------------------------------------------------------------|
+| `/mcp__freeagent__reconcile`    | End-to-end reconciliation orchestration: propose → review → apply with user gates |
 
 ## Development
 

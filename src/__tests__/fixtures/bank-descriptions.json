@@ -1,0 +1,736 @@
+{
+  "generated_at": "2026-05-08",
+  "source": "Starling business account, last 12 months",
+  "anonymised": true,
+  "count": 104,
+  "note": "See scripts/anonymise-bank-descriptions.mjs for the rewrite rules. Personal names and account/customer reference numbers are replaced; merchant names and structural noise are preserved verbatim.",
+  "transactions": [
+    {
+      "description": "1&amp;1 Web Hosting (Card Payment)/IONOS CLOUD LTD/POS/",
+      "full_description": "1&amp;1 Web Hosting (Card Payment)/IONOS CLOUD LTD/POS/£18.00",
+      "amount": "-18.0",
+      "dated_on": "2025-05-09",
+      "category_url": "https://api.freeagent.com/v2/categories/268"
+    },
+    {
+      "description": "Acme Designs Limited (Monzo) (Faster Payments In)/AD Monzo/PAYMENT/",
+      "full_description": "Acme Designs Limited (Monzo) (Faster Payments In)/AD Monzo/PAYMENT/£490.05",
+      "amount": "490.05",
+      "dated_on": "2026-04-18",
+      "category_url": "https://api.freeagent.com/v2/categories/761"
+    },
+    {
+      "description": "Acme Designs Limited (Monzo) (Faster Payments Out)/New account float/PAYMENT/",
+      "full_description": "Acme Designs Limited (Monzo) (Faster Payments Out)/New account float/PAYMENT/£100.00",
+      "amount": "-100.0",
+      "dated_on": "2026-02-19",
+      "category_url": "https://api.freeagent.com/v2/categories/761"
+    },
+    {
+      "description": "Acme Designs Limited (Tide) (Faster Payments In)/TIS Funds Withdraw/PAYMENT/",
+      "full_description": "Acme Designs Limited (Tide) (Faster Payments In)/TIS Funds Withdraw/PAYMENT/£26,000.00",
+      "amount": "26000.0",
+      "dated_on": "2026-04-14",
+      "category_url": "https://api.freeagent.com/v2/categories/761"
+    },
+    {
+      "description": "Acme Designs Limited (Tide) (Faster Payments Out)/Savings/PAYMENT/",
+      "full_description": "Acme Designs Limited (Tide) (Faster Payments Out)/Savings/PAYMENT/£19,500.00",
+      "amount": "-19500.0",
+      "dated_on": "2026-04-28",
+      "category_url": "https://api.freeagent.com/v2/categories/761"
+    },
+    {
+      "description": "Activcamps (Online Payment)/WWW.ACTIVCAMPS.COM/POS/",
+      "full_description": "Activcamps (Online Payment)/WWW.ACTIVCAMPS.COM/POS/£49.00",
+      "amount": "-49.0",
+      "dated_on": "2025-07-31",
+      "category_url": "https://api.freeagent.com/v2/categories/278"
+    },
+    {
+      "description": "Aegon : SIPPs (Faster Payments Out)/REFNUM/PAYMENT/",
+      "full_description": "Aegon : SIPPs (Faster Payments Out)/REFNUM/PAYMENT/£20,000.00",
+      "amount": "-20000.0",
+      "dated_on": "2026-02-10",
+      "category_url": "https://api.freeagent.com/v2/categories/350"
+    },
+    {
+      "description": "Aegon Sipp (Direct Debit)/REFNUM P B/DIRECTDEBIT/",
+      "full_description": "Aegon Sipp (Direct Debit)/REFNUM P B/DIRECTDEBIT/£250.00",
+      "amount": "-250.0",
+      "dated_on": "2026-05-05",
+      "category_url": "https://api.freeagent.com/v2/categories/350"
+    },
+    {
+      "description": "Aegon Sipp (Direct Debit)/REFNUM PERSON_A/DIRECTDEBIT/",
+      "full_description": "Aegon Sipp (Direct Debit)/REFNUM PERSON_A/DIRECTDEBIT/£600.00",
+      "amount": "-600.0",
+      "dated_on": "2026-05-05",
+      "category_url": "https://api.freeagent.com/v2/categories/350"
+    },
+    {
+      "description": "Amazon (Online Payment)/AMAZON* H53G03R25/POS/",
+      "full_description": "Amazon (Online Payment)/AMAZON* H53G03R25/POS/£8.47",
+      "amount": "-8.47",
+      "dated_on": "2025-10-13",
+      "category_url": "https://api.freeagent.com/v2/categories/274"
+    },
+    {
+      "description": "Anthropic (Online Payment)/ANTHROPIC/POS/",
+      "full_description": "Anthropic (Online Payment)/ANTHROPIC/POS/£8.80",
+      "amount": "-8.8",
+      "dated_on": "2026-02-05",
+      "category_url": "https://api.freeagent.com/v2/categories/269"
+    },
+    {
+      "description": "Anthropic (Online Payment)/CLAUDE.AI SUBSCRIPTION/POS/",
+      "full_description": "Anthropic (Online Payment)/CLAUDE.AI SUBSCRIPTION/POS/£75.00",
+      "amount": "-75.0",
+      "dated_on": "2026-05-04",
+      "category_url": "https://api.freeagent.com/v2/categories/269"
+    },
+    {
+      "description": "Black Sheep Coffee (Google Pay)/Zettle_*Black Sheep Co/POS/",
+      "full_description": "Black Sheep Coffee (Google Pay)/Zettle_*Black Sheep Co/POS/£9.27",
+      "amount": "-9.27",
+      "dated_on": "2026-01-08",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Broadbandbuyer (Online Payment)/BROADBANDBUYERCOM/POS/",
+      "full_description": "Broadbandbuyer (Online Payment)/BROADBANDBUYERCOM/POS/£208.80",
+      "amount": "-208.8",
+      "dated_on": "2025-09-09",
+      "category_url": "https://api.freeagent.com/v2/categories/270"
+    },
+    {
+      "description": "Burger King (Google Pay)/BURGER KING/POS/",
+      "full_description": "Burger King (Google Pay)/BURGER KING/POS/£16.36",
+      "amount": "-16.36",
+      "dated_on": "2025-09-19",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Caffè Nero (Google Pay)/CAFFE NERO MANCHESTER/POS/",
+      "full_description": "Caffè Nero (Google Pay)/CAFFE NERO MANCHESTER/POS/£3.80",
+      "amount": "-3.8",
+      "dated_on": "2026-03-11",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Caffe Nero Farringdon London (Google Pay)/CAFFE NERO FARRINGDON/POS/",
+      "full_description": "Caffe Nero Farringdon London (Google Pay)/CAFFE NERO FARRINGDON/POS/£3.95",
+      "amount": "-3.95",
+      "dated_on": "2025-11-27",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Cloudflare (Online Payment)/CLOUDFLARE/POS/",
+      "full_description": "Cloudflare (Online Payment)/CLOUDFLARE/POS/£7.93",
+      "amount": "-7.93",
+      "dated_on": "2026-04-05",
+      "category_url": "https://api.freeagent.com/v2/categories/268"
+    },
+    {
+      "description": "Co-op (Chip &amp; PIN)/CO OP GROUP FOOD/POS/",
+      "full_description": "Co-op (Chip &amp; PIN)/CO OP GROUP FOOD/POS/£7.10",
+      "amount": "-7.1",
+      "dated_on": "2025-11-06",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Co-op (Google Pay)/CO OP GROUP FOOD/POS/",
+      "full_description": "Co-op (Google Pay)/CO OP GROUP FOOD/POS/£1.75",
+      "amount": "-1.75",
+      "dated_on": "2026-02-12",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "CROSS LTD SW (Faster Payments In)/crosstide/PAYMENT/",
+      "full_description": "CROSS LTD SW (Faster Payments In)/crosstide/PAYMENT/£17,100.00",
+      "amount": "17100.0",
+      "dated_on": "2025-07-25",
+      "category_url": "https://api.freeagent.com/v2/categories/681"
+    },
+    {
+      "description": "Crowdfunder (Online Payment)/CF* CF-SUPPORTINGJULIA/POS/",
+      "full_description": "Crowdfunder (Online Payment)/CF* CF-SUPPORTINGJULIA/POS/£300.00",
+      "amount": "-300.0",
+      "dated_on": "2025-09-13",
+      "category_url": "https://api.freeagent.com/v2/categories/360"
+    },
+    {
+      "description": "Deep Dish * REFNUM (Online Payment)/DEEP DISH * REFNUM/POS/",
+      "full_description": "Deep Dish * REFNUM (Online Payment)/DEEP DISH * REFNUM/POS/£105.00",
+      "amount": "-105.0",
+      "dated_on": "2025-07-07",
+      "category_url": "https://api.freeagent.com/v2/categories/278"
+    },
+    {
+      "description": "Diamondsource (Card Payment)/DIAMONDSOURCE/POS/",
+      "full_description": "Diamondsource (Card Payment)/DIAMONDSOURCE/POS/£363.60",
+      "amount": "-363.6",
+      "dated_on": "2026-03-21",
+      "category_url": "https://api.freeagent.com/v2/categories/276"
+    },
+    {
+      "description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1402/DIRECTDEP/",
+      "full_description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1402/DIRECTDEP/£16,416.00",
+      "amount": "16416.0",
+      "dated_on": "2025-08-28",
+      "category_url": "https://api.freeagent.com/v2/categories/681"
+    },
+    {
+      "description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1414/DIRECTDEP/",
+      "full_description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1414/DIRECTDEP/£6,840.00",
+      "amount": "6840.0",
+      "dated_on": "2025-09-26",
+      "category_url": "https://api.freeagent.com/v2/categories/681"
+    },
+    {
+      "description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1427/DIRECTDEP/",
+      "full_description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1427/DIRECTDEP/£17,784.00",
+      "amount": "17784.0",
+      "dated_on": "2025-10-28",
+      "category_url": "https://api.freeagent.com/v2/categories/681"
+    },
+    {
+      "description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1439/DIRECTDEP/",
+      "full_description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1439/DIRECTDEP/£20,064.00",
+      "amount": "20064.0",
+      "dated_on": "2025-11-28",
+      "category_url": "https://api.freeagent.com/v2/categories/681"
+    },
+    {
+      "description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1452/DIRECTDEP/",
+      "full_description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1452/DIRECTDEP/£17,328.00",
+      "amount": "17328.0",
+      "dated_on": "2025-12-24",
+      "category_url": "https://api.freeagent.com/v2/categories/681"
+    },
+    {
+      "description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1462/DIRECTDEP/",
+      "full_description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1462/DIRECTDEP/£13,680.00",
+      "amount": "13680.0",
+      "dated_on": "2026-01-28",
+      "category_url": "https://api.freeagent.com/v2/categories/681"
+    },
+    {
+      "description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1475A/DIRECTDEP/",
+      "full_description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1475A/DIRECTDEP/£18,012.00",
+      "amount": "18012.0",
+      "dated_on": "2026-02-27",
+      "category_url": "https://api.freeagent.com/v2/categories/681"
+    },
+    {
+      "description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1490/DIRECTDEP/",
+      "full_description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1490/DIRECTDEP/£17,328.00",
+      "amount": "17328.0",
+      "dated_on": "2026-03-27",
+      "category_url": "https://api.freeagent.com/v2/categories/681"
+    },
+    {
+      "description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1510/DIRECTDEP/",
+      "full_description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1510/DIRECTDEP/£20,064.00",
+      "amount": "20064.0",
+      "dated_on": "2026-04-28",
+      "category_url": "https://api.freeagent.com/v2/categories/681"
+    },
+    {
+      "description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1514/DIRECTDEP/",
+      "full_description": "Eeukltd Ca (Direct Credit)/EEUK BATCH 1514/DIRECTDEP/£68.76",
+      "amount": "68.76",
+      "dated_on": "2026-05-01"
+    },
+    {
+      "description": "Falafel (Google Pay)/FALAFEL   QUICHE/POS/",
+      "full_description": "Falafel (Google Pay)/FALAFEL   QUICHE/POS/£8.50",
+      "amount": "-8.5",
+      "dated_on": "2025-11-13",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Fastflow T/a Armakuni (Online Payment)/FASTFLOW T/A ARMAKUNI/POS/",
+      "full_description": "Fastflow T/a Armakuni (Online Payment)/FASTFLOW T/A ARMAKUNI/POS/£249.00",
+      "amount": "-249.0",
+      "dated_on": "2025-10-13",
+      "category_url": "https://api.freeagent.com/v2/categories/282"
+    },
+    {
+      "description": "Fwd:coffee (Google Pay)/SQ *FWD:COFFEE/POS/",
+      "full_description": "Fwd:coffee (Google Pay)/SQ *FWD:COFFEE/POS/£3.90",
+      "amount": "-3.9",
+      "dated_on": "2025-11-12",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Gcrecwf&amp;partners (Direct Debit)/REFNUM/DIRECTDEBIT/",
+      "full_description": "Gcrecwf&amp;partners (Direct Debit)/REFNUM/DIRECTDEBIT/£190.80",
+      "amount": "-190.8",
+      "dated_on": "2026-05-06",
+      "category_url": "https://api.freeagent.com/v2/categories/292"
+    },
+    {
+      "description": "Goldsmiths Centre (Google Pay)/GOLDSMITHS CENTRE/POS/",
+      "full_description": "Goldsmiths Centre (Google Pay)/GOLDSMITHS CENTRE/POS/£11.00",
+      "amount": "-11.0",
+      "dated_on": "2025-07-11",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Google Cloud (Card Payment)/Google GSUITE_userA/POS/",
+      "full_description": "Google Cloud (Card Payment)/Google GSUITE_userA/POS/£7.00",
+      "amount": "-7.0",
+      "dated_on": "2025-12-02",
+      "category_url": "https://api.freeagent.com/v2/categories/272"
+    },
+    {
+      "description": "Google Cloud (Card Payment)/Google Workspace_userA/POS/",
+      "full_description": "Google Cloud (Card Payment)/Google Workspace_userA/POS/£7.00",
+      "amount": "-7.0",
+      "dated_on": "2026-05-02",
+      "category_url": "https://api.freeagent.com/v2/categories/269"
+    },
+    {
+      "description": "Hiscox  (Direct Debit)/REFNUM/DIRECTDEBIT/",
+      "full_description": "Hiscox  (Direct Debit)/REFNUM/DIRECTDEBIT/£25.17",
+      "amount": "-25.17",
+      "dated_on": "2026-05-01",
+      "category_url": "https://api.freeagent.com/v2/categories/364"
+    },
+    {
+      "description": "HMRC Corporation Tax (Cumbernauld) (Faster Payments Out)/REFNUM/PAYMENT/",
+      "full_description": "HMRC Corporation Tax (Cumbernauld) (Faster Payments Out)/REFNUM/PAYMENT/£29,018.18",
+      "amount": "-29018.18",
+      "dated_on": "2025-11-24",
+      "category_url": "https://api.freeagent.com/v2/categories/820"
+    },
+    {
+      "description": "HMRC VAT (Faster Payments Out)/REFNUM/PAYMENT/",
+      "full_description": "HMRC VAT (Faster Payments Out)/REFNUM/PAYMENT/£8,036.66",
+      "amount": "-8036.66",
+      "dated_on": "2026-03-16",
+      "category_url": "https://api.freeagent.com/v2/categories/817"
+    },
+    {
+      "description": "Hmshost Kings Cross St (Google Pay)/HMSHost Kings Cross st/POS/",
+      "full_description": "Hmshost Kings Cross St (Google Pay)/HMSHost Kings Cross st/POS/£12.08",
+      "amount": "-12.08",
+      "dated_on": "2025-08-06",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Hola Guacamole (Google Pay)/Zettle_*Hola Guacamole/POS/",
+      "full_description": "Hola Guacamole (Google Pay)/Zettle_*Hola Guacamole/POS/£9.50",
+      "amount": "-9.5",
+      "dated_on": "2025-06-20",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Information Commissioner's Office (Direct Debit)/REFNUM/DIRECTDEBIT/",
+      "full_description": "Information Commissioner's Office (Direct Debit)/REFNUM/DIRECTDEBIT/£47.00",
+      "amount": "-47.0",
+      "dated_on": "2026-03-16",
+      "category_url": "https://api.freeagent.com/v2/categories/290"
+    },
+    {
+      "description": "JetBrains (Card Payment)/1xAll Products Pack/POS/",
+      "full_description": "JetBrains (Card Payment)/1xAll Products Pack/POS/£171.60",
+      "amount": "-171.6",
+      "dated_on": "2026-02-28",
+      "category_url": "https://api.freeagent.com/v2/categories/269"
+    },
+    {
+      "description": "Legal &amp; General (Direct Debit)/REFNUM/DIRECTDEBIT/",
+      "full_description": "Legal &amp; General (Direct Debit)/REFNUM/DIRECTDEBIT/£18.50",
+      "amount": "-18.5",
+      "dated_on": "2026-05-05",
+      "category_url": "https://api.freeagent.com/v2/categories/364"
+    },
+    {
+      "description": "Leon (Google Pay)/LEON/POS/",
+      "full_description": "Leon (Google Pay)/LEON/POS/£13.68",
+      "amount": "-13.68",
+      "dated_on": "2026-04-22",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Leon (Google Pay)/LONDON BRIDGE LEON/POS/",
+      "full_description": "Leon (Google Pay)/LONDON BRIDGE LEON/POS/£7.49",
+      "amount": "-7.49",
+      "dated_on": "2026-03-27",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Leon Euston (Google Pay)/Leon Euston/POS/",
+      "full_description": "Leon Euston (Google Pay)/Leon Euston/POS/£17.06",
+      "amount": "-17.06",
+      "dated_on": "2026-03-24",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Lory S Tiramis (Google Pay)/Zettle_*Lory s tiramis/POS/",
+      "full_description": "Lory S Tiramis (Google Pay)/Zettle_*Lory s tiramis/POS/£34.10",
+      "amount": "-34.1",
+      "dated_on": "2026-03-24",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Ls Ismash (Contactless)/LS ISMASH/POS/",
+      "full_description": "Ls Ismash (Contactless)/LS ISMASH/POS/£10.00",
+      "amount": "-10.0",
+      "dated_on": "2025-06-19",
+      "category_url": "https://api.freeagent.com/v2/categories/274"
+    },
+    {
+      "description": "Ls Wilde Aparthotels M (Google Pay)/LS Wilde Aparthotels M/POS/",
+      "full_description": "Ls Wilde Aparthotels M (Google Pay)/LS Wilde Aparthotels M/POS/£6.00",
+      "amount": "-6.0",
+      "dated_on": "2025-12-01",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Magic Booking (Online Payment)/MAGIC BOOKING/POS/",
+      "full_description": "Magic Booking (Online Payment)/MAGIC BOOKING/POS/£166.75",
+      "amount": "-166.75",
+      "dated_on": "2025-07-30",
+      "category_url": "https://api.freeagent.com/v2/categories/278"
+    },
+    {
+      "description": "Manchester Piccadilly (Google Pay)/MANCHESTER PICCADILLY/POS/",
+      "full_description": "Manchester Piccadilly (Google Pay)/MANCHESTER PICCADILLY/POS/£14.77",
+      "amount": "-14.77",
+      "dated_on": "2025-12-02",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Marks &amp; Spencer (Google Pay)/M&amp;S SIMPLY FOOD - SSP/POS/",
+      "full_description": "Marks &amp; Spencer (Google Pay)/M&amp;S SIMPLY FOOD - SSP/POS/£7.10",
+      "amount": "-7.1",
+      "dated_on": "2026-03-11",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Marks &amp; Spencer (Google Pay)/MARKS&amp;SPENCER PLC/POS/",
+      "full_description": "Marks &amp; Spencer (Google Pay)/MARKS&amp;SPENCER PLC/POS/£7.00",
+      "amount": "-7.0",
+      "dated_on": "2026-03-25",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Marrakesh Grill (Contactless)/Marrakesh Grill/POS/",
+      "full_description": "Marrakesh Grill (Contactless)/Marrakesh Grill/POS/£10.00",
+      "amount": "-10.0",
+      "dated_on": "2025-10-08",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Marrakesh Grill (Google Pay)/Marrakesh Grill/POS/",
+      "full_description": "Marrakesh Grill (Google Pay)/Marrakesh Grill/POS/£7.00",
+      "amount": "-7.0",
+      "dated_on": "2026-01-22",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Moxy Manchester City (Google Pay)/MOXY MANCHESTER CITY/POS/",
+      "full_description": "Moxy Manchester City (Google Pay)/MOXY MANCHESTER CITY/POS/£1.20",
+      "amount": "-1.2",
+      "dated_on": "2025-09-10",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "O-Bite (Google Pay)/O-BITE/POS/",
+      "full_description": "O-Bite (Google Pay)/O-BITE/POS/£11.00",
+      "amount": "-11.0",
+      "dated_on": "2025-07-18",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Paddington Station (Google Pay)/PADDINGTON STATION/POS/",
+      "full_description": "Paddington Station (Google Pay)/PADDINGTON STATION/POS/£7.00",
+      "amount": "-7.0",
+      "dated_on": "2026-01-08",
+      "category_url": "https://api.freeagent.com/v2/categories/365"
+    },
+    {
+      "description": "Papier (Online Payment)/PAPIER/POS/",
+      "full_description": "Papier (Online Payment)/PAPIER/POS/£26.99",
+      "amount": "-26.99",
+      "dated_on": "2025-11-06",
+      "category_url": "https://api.freeagent.com/v2/categories/277"
+    },
+    {
+      "description": "Person A Monzo Account (Faster Payments In)/PB Dividend 25/26/PAYMENT/",
+      "full_description": "Person A Monzo Account (Faster Payments In)/PB Dividend 25/26/PAYMENT/£1,681.81",
+      "amount": "1681.81",
+      "dated_on": "2025-10-12",
+      "category_url": "https://api.freeagent.com/v2/categories/907"
+    },
+    {
+      "description": "Person A Monzo Account (Faster Payments In)/UCK-G2-PLUS Sale/PAYMENT/",
+      "full_description": "Person A Monzo Account (Faster Payments In)/UCK-G2-PLUS Sale/PAYMENT/£120.00",
+      "amount": "120.0",
+      "dated_on": "2025-10-08",
+      "category_url": "https://api.freeagent.com/v2/categories/461"
+    },
+    {
+      "description": "Person A Monzo Account (Faster Payments In)/USG Sale/PAYMENT/",
+      "full_description": "Person A Monzo Account (Faster Payments In)/USG Sale/PAYMENT/£13.50",
+      "amount": "13.5",
+      "dated_on": "2025-10-08",
+      "category_url": "https://api.freeagent.com/v2/categories/461"
+    },
+    {
+      "description": "Person A Monzo Account (Faster Payments Out)/PA Div 2025/26/PAYMENT/",
+      "full_description": "Person A Monzo Account (Faster Payments Out)/PA Div 2025/26/PAYMENT/£3,825.00",
+      "amount": "-3825.0",
+      "dated_on": "2026-01-09",
+      "category_url": "https://api.freeagent.com/v2/categories/908"
+    },
+    {
+      "description": "Person A Monzo Account (Faster Payments Out)/PA Div 2026/27/PAYMENT/",
+      "full_description": "Person A Monzo Account (Faster Payments Out)/PA Div 2026/27/PAYMENT/£11,730.00",
+      "amount": "-11730.0",
+      "dated_on": "2026-04-14",
+      "category_url": "https://api.freeagent.com/v2/categories/908"
+    },
+    {
+      "description": "Person A Monzo Account (Faster Payments Out)/PA Expenses:USW-24/PAYMENT/",
+      "full_description": "Person A Monzo Account (Faster Payments Out)/PA Expenses:USW-24/PAYMENT/£245.88",
+      "amount": "-245.88",
+      "dated_on": "2026-05-02",
+      "category_url": "https://api.freeagent.com/v2/categories/365"
+    },
+    {
+      "description": "Person A Monzo Account (Faster Payments Out)/PA Expenses/PAYMENT/",
+      "full_description": "Person A Monzo Account (Faster Payments Out)/PA Expenses/PAYMENT/£26.05",
+      "amount": "-26.05",
+      "dated_on": "2025-09-20",
+      "category_url": "https://api.freeagent.com/v2/categories/905"
+    },
+    {
+      "description": "Person A Monzo Account (Faster Payments Out)/PB Div 2025/26/PAYMENT/",
+      "full_description": "Person A Monzo Account (Faster Payments Out)/PB Div 2025/26/PAYMENT/£12,740.00",
+      "amount": "-12740.0",
+      "dated_on": "2025-10-12",
+      "category_url": "https://api.freeagent.com/v2/categories/908"
+    },
+    {
+      "description": "Person B (Monzo Account) (Faster Payments Out)/NL Expenses/PAYMENT/",
+      "full_description": "Person B (Monzo Account) (Faster Payments Out)/NL Expenses/PAYMENT/£130.00",
+      "amount": "-130.0",
+      "dated_on": "2025-06-11",
+      "category_url": "https://api.freeagent.com/v2/categories/905"
+    },
+    {
+      "description": "Person B (Monzo Account) (Faster Payments Out)/PB Div 2025/26/PAYMENT/",
+      "full_description": "Person B (Monzo Account) (Faster Payments Out)/PB Div 2025/26/PAYMENT/£3,675.00",
+      "amount": "-3675.0",
+      "dated_on": "2026-01-09",
+      "category_url": "https://api.freeagent.com/v2/categories/908"
+    },
+    {
+      "description": "Person B (Monzo Account) (Faster Payments Out)/PB Div 2026/27/PAYMENT/",
+      "full_description": "Person B (Monzo Account) (Faster Payments Out)/PB Div 2026/27/PAYMENT/£11,270.00",
+      "amount": "-11270.0",
+      "dated_on": "2026-04-14",
+      "category_url": "https://api.freeagent.com/v2/categories/908"
+    },
+    {
+      "description": "Pret A Manger (Google Pay)/PRET A MANGER/POS/",
+      "full_description": "Pret A Manger (Google Pay)/PRET A MANGER/POS/£10.00",
+      "amount": "-10.0",
+      "dated_on": "2026-01-08",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Qdos Contractor (Card Payment)/QDOS CONTRACTOR/POS/",
+      "full_description": "Qdos Contractor (Card Payment)/QDOS CONTRACTOR/POS/£150.00",
+      "amount": "-150.0",
+      "dated_on": "2025-06-24",
+      "category_url": "https://api.freeagent.com/v2/categories/290"
+    },
+    {
+      "description": "Ronis Cafe Bar (Google Pay)/Ronis Cafe Bar/POS/",
+      "full_description": "Ronis Cafe Bar (Google Pay)/Ronis Cafe Bar/POS/£14.50",
+      "amount": "-14.5",
+      "dated_on": "2026-01-30",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Sainsbury's (Google Pay)/SAINSBURYS S/MKTS/POS/",
+      "full_description": "Sainsbury's (Google Pay)/SAINSBURYS S/MKTS/POS/£1.15",
+      "amount": "-1.15",
+      "dated_on": "2026-03-26",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Santander 123 Joint Account (Faster Payments Out)/PA Salary 25/26/PAYMENT/",
+      "full_description": "Santander 123 Joint Account (Faster Payments Out)/PA Salary 25/26/PAYMENT/£1,047.50",
+      "amount": "-1047.5",
+      "dated_on": "2026-03-28",
+      "category_url": "https://api.freeagent.com/v2/categories/902"
+    },
+    {
+      "description": "Santander 123 Joint Account (Faster Payments Out)/PA Salary 26/27/PAYMENT/",
+      "full_description": "Santander 123 Joint Account (Faster Payments Out)/PA Salary 26/27/PAYMENT/£1,047.50",
+      "amount": "-1047.5",
+      "dated_on": "2026-04-28",
+      "category_url": "https://api.freeagent.com/v2/categories/902"
+    },
+    {
+      "description": "Santander 123 Joint Account (Faster Payments Out)/PB Salary 25/26/PAYMENT/",
+      "full_description": "Santander 123 Joint Account (Faster Payments Out)/PB Salary 25/26/PAYMENT/£250.00",
+      "amount": "-250.0",
+      "dated_on": "2026-03-28",
+      "category_url": "https://api.freeagent.com/v2/categories/902"
+    },
+    {
+      "description": "Santander 123 Joint Account (Faster Payments Out)/PB Salary 26/27/PAYMENT/",
+      "full_description": "Santander 123 Joint Account (Faster Payments Out)/PB Salary 26/27/PAYMENT/£250.00",
+      "amount": "-250.0",
+      "dated_on": "2026-04-28",
+      "category_url": "https://api.freeagent.com/v2/categories/902"
+    },
+    {
+      "description": "Shell (Google Pay)/SHELL NEASDEN  014/POS/",
+      "full_description": "Shell (Google Pay)/SHELL NEASDEN  014/POS/£4.24",
+      "amount": "-4.24",
+      "dated_on": "2025-11-20",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Smith's Bar And Grill (Google Pay)/Smith's Bar and Grill/POS/",
+      "full_description": "Smith's Bar And Grill (Google Pay)/Smith's Bar and Grill/POS/£13.30",
+      "amount": "-13.3",
+      "dated_on": "2025-06-20",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Sp Gl.Inet Uk (Online Payment)/SP GL.INET UK/POS/",
+      "full_description": "Sp Gl.Inet Uk (Online Payment)/SP GL.INET UK/POS/£137.99",
+      "amount": "-137.99",
+      "dated_on": "2025-09-09",
+      "category_url": "https://api.freeagent.com/v2/categories/270"
+    },
+    {
+      "description": "Station Bistro Cafe (Google Pay)/Station Bistro Cafe/POS/",
+      "full_description": "Station Bistro Cafe (Google Pay)/Station Bistro Cafe/POS/£11.50",
+      "amount": "-11.5",
+      "dated_on": "2026-01-09",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Sumup *cheltenham Tax (Google Pay)/SumUp  *Cheltenham Tax/POS/",
+      "full_description": "Sumup *cheltenham Tax (Google Pay)/SumUp  *Cheltenham Tax/POS/£21.05",
+      "amount": "-21.05",
+      "dated_on": "2026-04-22",
+      "category_url": "https://api.freeagent.com/v2/categories/365"
+    },
+    {
+      "description": "Sumup *northern Espre (Google Pay)/SumUp  *NORTHERN ESPRE/POS/",
+      "full_description": "Sumup *northern Espre (Google Pay)/SumUp  *NORTHERN ESPRE/POS/£18.20",
+      "amount": "-18.2",
+      "dated_on": "2025-08-08",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Sumup *staycity Uk Lt (Google Pay)/SumUp  *Staycity UK LT/POS/",
+      "full_description": "Sumup *staycity Uk Lt (Google Pay)/SumUp  *Staycity UK LT/POS/£4.50",
+      "amount": "-4.5",
+      "dated_on": "2025-12-01",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Tesco (Google Pay)/TESCO STORES/POS/",
+      "full_description": "Tesco (Google Pay)/TESCO STORES/POS/£5.50",
+      "amount": "-5.5",
+      "dated_on": "2026-03-24",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "TfL (Contactless)/TFL TRAVEL CH/POS/",
+      "full_description": "TfL (Contactless)/TFL TRAVEL CH/POS/£10.50",
+      "amount": "-10.5",
+      "dated_on": "2025-10-09",
+      "category_url": "https://api.freeagent.com/v2/categories/365"
+    },
+    {
+      "description": "TfL (Google Pay)/TFL TRAVEL CH/POS/",
+      "full_description": "TfL (Google Pay)/TFL TRAVEL CH/POS/£10.50",
+      "amount": "-10.5",
+      "dated_on": "2026-05-06",
+      "category_url": "https://api.freeagent.com/v2/categories/365"
+    },
+    {
+      "description": "The Coal Hole (Google Pay)/Coal Hole/POS/",
+      "full_description": "The Coal Hole (Google Pay)/Coal Hole/POS/£6.40",
+      "amount": "-6.4",
+      "dated_on": "2025-11-06",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "The Great Northwood (Google Pay)/The Great Northwood/POS/",
+      "full_description": "The Great Northwood (Google Pay)/The Great Northwood/POS/£24.58",
+      "amount": "-24.58",
+      "dated_on": "2026-02-13",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "The Liberty Ki (Google Pay)/Zettle_*THE LIBERTY KI/POS/",
+      "full_description": "The Liberty Ki (Google Pay)/Zettle_*THE LIBERTY KI/POS/£9.50",
+      "amount": "-9.5",
+      "dated_on": "2025-11-27",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "The Poke Factory (Google Pay)/The Poke Factory/POS/",
+      "full_description": "The Poke Factory (Google Pay)/The Poke Factory/POS/£9.95",
+      "amount": "-9.95",
+      "dated_on": "2026-05-05",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Udemy Subscription (Online Payment)/UDEMY: ONLINE COURSES/POS/",
+      "full_description": "Udemy Subscription (Online Payment)/UDEMY: ONLINE COURSES/POS/£12.99",
+      "amount": "-12.99",
+      "dated_on": "2025-12-04",
+      "category_url": "https://api.freeagent.com/v2/categories/282"
+    },
+    {
+      "description": "Waitrose (Google Pay)/WAITROSE 619/POS/",
+      "full_description": "Waitrose (Google Pay)/WAITROSE 619/POS/£6.25",
+      "amount": "-6.25",
+      "dated_on": "2025-09-18",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Waitrose &amp; Partners (Google Pay)/WAITROSE STORES/POS/",
+      "full_description": "Waitrose &amp; Partners (Google Pay)/WAITROSE STORES/POS/£8.05",
+      "amount": "-8.05",
+      "dated_on": "2026-03-27",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "White Mulberries (Google Pay)/SQ *WHITE MULBERRIES/POS/",
+      "full_description": "White Mulberries (Google Pay)/SQ *WHITE MULBERRIES/POS/£4.30",
+      "amount": "-4.3",
+      "dated_on": "2026-03-26",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    },
+    {
+      "description": "Wolf Cycles (Online Payment)/WOLF CYCLES LIMITED/POS/",
+      "full_description": "Wolf Cycles (Online Payment)/WOLF CYCLES LIMITED/POS/£15.58",
+      "amount": "-15.58",
+      "dated_on": "2025-05-12",
+      "category_url": "https://api.freeagent.com/v2/categories/367"
+    },
+    {
+      "description": "Yummy Yummy Mobile (Google Pay)/Yummy yummy mobile/POS/",
+      "full_description": "Yummy Yummy Mobile (Google Pay)/Yummy yummy mobile/POS/£11.99",
+      "amount": "-11.99",
+      "dated_on": "2025-10-23",
+      "category_url": "https://api.freeagent.com/v2/categories/285"
+    }
+  ]
+}

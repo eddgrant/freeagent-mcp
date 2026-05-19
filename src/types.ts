@@ -230,6 +230,10 @@ export interface BankAccountsResponse {
     bank_accounts: BankAccount[];
 }
 
+export interface BankAccountResponse {
+    bank_account: BankAccount;
+}
+
 export interface BankTransaction {
     url: string;
     amount: string;
@@ -239,12 +243,21 @@ export interface BankTransaction {
     full_description?: string;
     unexplained_amount: string;
     is_manual: boolean;
+    transaction_id?: string;
+    matching_transactions_count?: number;
+    /** Nested when fetched via /bank_transactions with view=all or view=
+     *  explained. Empty for unexplained transactions. */
+    bank_transaction_explanations?: BankTransactionExplanation[];
     created_at: string;
     updated_at: string;
 }
 
 export interface BankTransactionsResponse {
     bank_transactions: BankTransaction[];
+}
+
+export interface BankTransactionResponse {
+    bank_transaction: BankTransaction;
 }
 
 export interface BankTransactionExplanation {
@@ -366,4 +379,169 @@ export interface FreeAgentConfig {
     clientSecret: string;
     accessToken: string;
     refreshToken: string;
+}
+
+// =============================================================================
+// Reconciliation v1
+// See TASKS.md ("Reconcile bank transactions (v1)") for the design and
+// SECURITY.md for the threat model.
+// =============================================================================
+
+export const SCHEMA_VERSION = 1;
+
+export interface Evidence {
+    source: string;
+    ref_id: string;
+    ref_url?: string;
+    file_name: string;
+    content_type: string;
+    extracted?: {
+        dated_on?: string;
+        gross_value?: string;
+        currency?: string;
+        sales_tax_value?: string;
+        sales_tax_rate?: string;
+        merchant?: string;
+        sender?: string;
+        snippet?: string;
+    };
+    match_confidence?: number;
+}
+
+export interface ProposedExplanation {
+    dated_on: string;
+    gross_value: string;
+    category?: string;
+    paid_bill?: string;
+    paid_invoice?: string;
+    sales_tax_status?: 'TAXABLE' | 'EXEMPT' | 'OUT_OF_SCOPE';
+    sales_tax_rate?: string;
+    sales_tax_value?: string;
+    description?: string;
+    project?: string;
+    evidence?: Evidence[];
+    alternates?: {
+        category?: string[];
+        evidence?: Evidence[];
+    };
+    history_match?: {
+        merchant_signature: string;
+        prior_count: number;
+        last_used: string;
+        recurring?: { cadence_days: number; confidence: number };
+    };
+}
+
+export interface ReconciliationProposal {
+    proposal_id: string;
+    bank_transaction: string;
+    explanations: ProposedExplanation[];
+    overall_confidence: number;
+    rationale: string;
+    suggested_searches?: SearchHint[];
+}
+
+export interface SearchHint {
+    intent: 'find_receipt' | 'find_invoice' | 'find_email_thread';
+    around_date: string;
+    date_window_days?: number;
+    amount?: string;
+    amount_tolerance?: string;
+    currency?: string;
+    merchant_keywords?: string[];
+    from_domains?: string[];
+    has_attachment?: boolean;
+}
+
+export interface ExplanationToApply {
+    bank_transaction: string;
+    dated_on: string;
+    gross_value: string;
+    category?: string;
+    paid_bill?: string;
+    paid_invoice?: string;
+    sales_tax_status?: 'TAXABLE' | 'EXEMPT' | 'OUT_OF_SCOPE';
+    sales_tax_rate?: string;
+    sales_tax_value?: string;
+    description?: string;
+    project?: string;
+    attachment?: {
+        evidence_path: string;
+        file_name: string;
+        content_type: string;
+        description?: string;
+    };
+    marked_for_review?: boolean;
+
+    /** sha256 over the canonical JSON form of:
+     *    { bank_transaction, gross_value, dated_on,
+     *      one_of: { category | paid_bill | paid_invoice },
+     *      description }
+     *  with keys sorted before stringification. `description` is in
+     *  the hash so legitimate same-day same-amount splits don't collide. */
+    idempotency_key: string;
+
+    // v1.x fields — declared so the schema doesn't break when lifted.
+    // apply_reconciliations refuses payloads that set any of these in v1.
+    foreign_currency_value?: string;
+    foreign_currency_rate?: string;
+    transfer_bank_account?: string;
+}
+
+export type SkipReason =
+    | 'already_explained'
+    | 'duplicate_of_existing_explanation'
+    | 'bill_not_found'
+    | 'bill_already_paid'
+    | 'invoice_not_found'
+    | 'invoice_already_paid'
+    | 'period_locked'
+    | 'currency_mismatch'
+    | 'staging_volume_not_mounted'
+    | 'transaction_not_found';
+
+export interface ApplyResult {
+    posted: Array<{
+        bank_transaction: string;
+        explanation_url: string;
+        idempotency_key: string;
+    }>;
+    skipped: Array<{
+        bank_transaction: string;
+        reason: SkipReason;
+        idempotency_key: string;
+    }>;
+    failed: Array<{
+        bank_transaction: string;
+        error: string;
+        http_status?: number;
+        idempotency_key: string;
+    }>;
+}
+
+// FreeAgent API shape for POST /bank_transaction_explanations.
+// apply_reconciliations builds these from ExplanationToApply.
+export interface BankTransactionExplanationCreatePayload {
+    bank_transaction: string;
+    dated_on: string;
+    gross_value: string;
+    description?: string;
+    category?: string;
+    paid_bill?: string;
+    paid_invoice?: string;
+    sales_tax_status?: string;
+    sales_tax_rate?: string;
+    sales_tax_value?: string;
+    project?: string;
+    marked_for_review?: boolean;
+    attachment?: {
+        data: string;        // base64-encoded bytes
+        file_name: string;
+        content_type: string;
+        description?: string;
+    };
+}
+
+export interface BankTransactionExplanationResponse {
+    bank_transaction_explanation: BankTransactionExplanation;
 }

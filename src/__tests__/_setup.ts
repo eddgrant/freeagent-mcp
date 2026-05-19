@@ -38,15 +38,28 @@ export function createMockFreeAgentClient(): FreeAgentClient {
         getProfitAndLossSummary: vi.fn(),
         listCategories: vi.fn(),
         listBankAccounts: vi.fn(),
+        getBankAccount: vi.fn(),
         listBankTransactions: vi.fn(),
+        getBankTransaction: vi.fn(),
         listBankTransactionExplanations: vi.fn(),
+        createBankTransactionExplanation: vi.fn(),
         listBills: vi.fn(),
         getBill: vi.fn(),
     } as unknown as FreeAgentClient;
 }
 
-export async function connectTestMcpClient(mockFaClient: FreeAgentClient): Promise<Client> {
-    const faServer = new FreeAgentServer(mockFaClient);
+export async function connectTestMcpClient(
+    mockFaClient: FreeAgentClient,
+    options?: { stagingSessionPath?: string | null },
+): Promise<Client> {
+    // Opt out of real-staging side effects by default. Tests that need
+    // a working stage_evidence pass a real temp dir via options.
+    const stagingState = {
+        ready: options?.stagingSessionPath != null,
+        base: '',
+        sessionPath: options?.stagingSessionPath ?? null,
+    };
+    const faServer = new FreeAgentServer(mockFaClient, { stagingState });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await faServer.run(serverTransport);
     const client = new Client({ name: 'test-client', version: '1.0.0' });

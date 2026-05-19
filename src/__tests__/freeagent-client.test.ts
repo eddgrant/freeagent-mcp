@@ -521,6 +521,80 @@ describe('markInvoiceAsSent', () => {
   });
 });
 
+describe('getBankAccount', () => {
+  it('calls GET /bank_accounts/:id and unwraps response', async () => {
+    const bank_account = { url: 'https://api.freeagent.com/v2/bank_accounts/9', currency: 'GBP' };
+    mockGet.mockResolvedValue({ data: { bank_account } });
+
+    const result = await client.getBankAccount('9');
+
+    expect(mockGet).toHaveBeenCalledWith('/bank_accounts/9');
+    expect(result).toEqual(bank_account);
+  });
+});
+
+describe('getBankTransaction', () => {
+  it('calls GET /bank_transactions/:id and unwraps response', async () => {
+    const bank_transaction = { url: 'https://api.freeagent.com/v2/bank_transactions/123', amount: '-42.10' };
+    mockGet.mockResolvedValue({ data: { bank_transaction } });
+
+    const result = await client.getBankTransaction('123');
+
+    expect(mockGet).toHaveBeenCalledWith('/bank_transactions/123');
+    expect(result).toEqual(bank_transaction);
+  });
+});
+
+describe('createBankTransactionExplanation', () => {
+  it('calls POST /bank_transaction_explanations with wrapped body', async () => {
+    const payload = {
+      bank_transaction: 'https://api.freeagent.com/v2/bank_transactions/123',
+      dated_on: '2026-04-12',
+      gross_value: '-42.10',
+      category: 'https://api.freeagent.com/v2/categories/285',
+    };
+    const created = { url: 'https://api.freeagent.com/v2/bank_transaction_explanations/777', ...payload };
+    mockPost.mockResolvedValue({ data: { bank_transaction_explanation: created } });
+
+    const result = await client.createBankTransactionExplanation(payload);
+
+    expect(mockPost).toHaveBeenCalledWith(
+      '/bank_transaction_explanations',
+      { bank_transaction_explanation: payload },
+    );
+    expect(result).toEqual(created);
+  });
+
+  it('forwards an attachment payload verbatim', async () => {
+    const payload = {
+      bank_transaction: 'https://api.freeagent.com/v2/bank_transactions/123',
+      dated_on: '2026-04-12',
+      gross_value: '-42.10',
+      category: 'https://api.freeagent.com/v2/categories/285',
+      attachment: {
+        data: 'aGVsbG8=',
+        file_name: 'receipt.pdf',
+        content_type: 'application/pdf',
+      },
+    };
+    mockPost.mockResolvedValue({ data: { bank_transaction_explanation: { url: 'x', ...payload } } });
+
+    await client.createBankTransactionExplanation(payload);
+
+    expect(mockPost).toHaveBeenCalledWith(
+      '/bank_transaction_explanations',
+      { bank_transaction_explanation: payload },
+    );
+  });
+
+  it('re-throws on API error', async () => {
+    mockPost.mockRejectedValue(new Error('422 unprocessable'));
+    await expect(client.createBankTransactionExplanation({
+      bank_transaction: 'x', dated_on: '2026-04-12', gross_value: '0',
+    })).rejects.toThrow('422 unprocessable');
+  });
+});
+
 describe('token refresh interceptor', () => {
   it('registers a response interceptor', () => {
     expect(mockInterceptors.response.use).toHaveBeenCalledWith(
