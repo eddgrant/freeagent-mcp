@@ -7,9 +7,10 @@
 //
 // Every schema is a z.strictObject — unknown keys are rejected rather than
 // silently dropped. Per-field `.describe()` text becomes the field
-// description the model sees. Tools that take no input (get_current_user,
-// list_bank_accounts, get_staging_directory, get_mileage_settings) have no
-// entry here and are registered without an inputSchema.
+// description the model sees. The four tools that take no input
+// (get_current_user, list_bank_accounts, get_staging_directory,
+// get_mileage_settings) still get a z.strictObject({}) entry, so an unknown
+// key is rejected on them too — strictness is uniform across all 38 tools.
 
 import { z } from 'zod';
 
@@ -305,6 +306,13 @@ export const toolSchemas = {
     create_expenses: z.strictObject({
         expenses: z.array(createExpense).min(1).max(100).describe('Up to 100 expense objects, each shaped like the create_expense arguments.'),
     }),
+
+    // Zero-input tools — no parameters, but still strict: an unknown key is
+    // rejected rather than silently accepted, exactly like every other tool.
+    get_current_user: z.strictObject({}),
+    list_bank_accounts: z.strictObject({}),
+    get_staging_directory: z.strictObject({}),
+    get_mileage_settings: z.strictObject({}),
 };
 
 export type ToolName = keyof typeof toolSchemas;

@@ -143,6 +143,35 @@ describe('get_current_user', () => {
   });
 });
 
+describe('zero-input tools reject unknown keys (strict schema)', () => {
+  it('get_current_user rejects an unknown key', async () => {
+    const result = await callTool('get_current_user', { bogus: true });
+    expect(result.isError).toBe(true);
+    expect((result.content as any)[0].text).toMatch(/validation/i);
+    expect(mockFaClient.getCurrentUser).not.toHaveBeenCalled();
+  });
+
+  it('list_bank_accounts rejects an unknown key', async () => {
+    const result = await callTool('list_bank_accounts', { bogus: true });
+    expect(result.isError).toBe(true);
+    expect((result.content as any)[0].text).toMatch(/validation/i);
+    expect(mockFaClient.listBankAccounts).not.toHaveBeenCalled();
+  });
+
+  it('get_staging_directory rejects an unknown key', async () => {
+    const result = await callTool('get_staging_directory', { bogus: true });
+    expect(result.isError).toBe(true);
+    expect((result.content as any)[0].text).toMatch(/validation/i);
+  });
+
+  it('get_mileage_settings rejects an unknown key', async () => {
+    const result = await callTool('get_mileage_settings', { bogus: true });
+    expect(result.isError).toBe(true);
+    expect((result.content as any)[0].text).toMatch(/validation/i);
+    expect(mockFaClient.getMileageSettings).not.toHaveBeenCalled();
+  });
+});
+
 describe('list_invoices', () => {
   it('returns JSON-stringified client response', async () => {
     const invoices = [{ url: 'https://api.freeagent.com/v2/invoices/1' }];
