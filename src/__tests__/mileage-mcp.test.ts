@@ -19,6 +19,19 @@ const settings: MileageSettings = {
   mileage_rates: [],
 };
 
+const MILEAGE_CATEGORY = 'https://api.freeagent.com/v2/categories/249';
+
+// FreeAgent's /expenses endpoint rejects the bare word "Mileage" as a
+// nominal code; the handler resolves it against list_categories instead.
+const categories = {
+  admin_expenses_categories: [
+    { url: MILEAGE_CATEGORY, description: 'Mileage', nominal_code: '249' },
+  ],
+  cost_of_sales_categories: [],
+  income_categories: [],
+  general_categories: [],
+};
+
 describe('mileage tools (via MCP)', () => {
   let client: Client;
   let mock: FreeAgentClient;
@@ -28,6 +41,7 @@ describe('mileage tools (via MCP)', () => {
     (mock.getCurrentUser as any).mockResolvedValue({ url: CURRENT_USER, first_name: 'Edd', last_name: 'Grant', email: 'edd@co.com' });
     (mock.getMileageSettings as any).mockResolvedValue(settings);
     (mock.createExpense as any).mockResolvedValue({ url: 'https://api.freeagent.com/v2/expenses/1', user: CURRENT_USER, dated_on: '2026-05-01', created_at: '', updated_at: '' });
+    (mock.listCategories as any).mockResolvedValue(categories);
     client = await connectTestMcpClient(mock);
   });
 
@@ -50,7 +64,7 @@ describe('mileage tools (via MCP)', () => {
     });
     const payload = (mock.createExpense as any).mock.calls[0][0] as ExpenseCreatePayload;
     expect(payload).toMatchObject({
-      category: 'Mileage',
+      category: MILEAGE_CATEGORY,
       mileage: '47',
       vehicle_type: 'Car',
       engine_type: 'Petrol',
@@ -70,6 +84,16 @@ describe('mileage tools (via MCP)', () => {
     const payload = (mock.createExpense as any).mock.calls[0][0] as ExpenseCreatePayload;
     expect(payload.vehicle_type).toBe('Bicycle');
     expect(payload.engine_type).toBeUndefined();
+  });
+
+  it('resolves the Mileage category to its URL, not the bare word "Mileage"', async () => {
+    await client.callTool({
+      name: 'create_mileage_expense',
+      arguments: { dated_on: '2026-05-01', mileage: 12, vehicle_type: 'Bicycle' },
+    });
+    const payload = (mock.createExpense as any).mock.calls[0][0] as ExpenseCreatePayload;
+    expect(payload.category).toBe(MILEAGE_CATEGORY);
+    expect(payload.category).not.toBe('Mileage');
   });
 
   it('returns a helpful error for an invalid engine size', async () => {

@@ -88,12 +88,13 @@ describe('buildMileagePayload', () => {
     const input: CreateMileageExpenseInput = { dated_on: '2026-05-01', mileage: 47, vehicle_type: 'Car' };
     const payload = buildMileagePayload(input, {
       user: 'https://api.freeagent.com/v2/users/1',
+      category: 'https://api.freeagent.com/v2/categories/249',
       engine: { engine_type: 'Petrol', engine_size: 'Up to 1400cc' },
     });
     expect(payload).toEqual({
       user: 'https://api.freeagent.com/v2/users/1',
       dated_on: '2026-05-01',
-      category: 'Mileage',
+      category: 'https://api.freeagent.com/v2/categories/249',
       mileage: '47',
       vehicle_type: 'Car',
       reclaim_mileage: 1,
@@ -105,12 +106,12 @@ describe('buildMileagePayload', () => {
 
   it('defaults reclaim_mileage to 1 (AMAP) when omitted', () => {
     const input: CreateMileageExpenseInput = { dated_on: '2026-05-01', mileage: 12, vehicle_type: 'Bicycle' };
-    expect(buildMileagePayload(input, { user: 'u/1', engine: {} }).reclaim_mileage).toBe(1);
+    expect(buildMileagePayload(input, { user: 'u/1', category: 'https://api.freeagent.com/v2/categories/249', engine: {} }).reclaim_mileage).toBe(1);
   });
 
   it('maps reclaim_mileage: false to 0 and omits engine fields for a bicycle', () => {
     const input: CreateMileageExpenseInput = { dated_on: '2026-05-01', mileage: 10, vehicle_type: 'Bicycle', reclaim_mileage: false };
-    const payload = buildMileagePayload(input, { user: 'u/1', engine: {} });
+    const payload = buildMileagePayload(input, { user: 'u/1', category: 'https://api.freeagent.com/v2/categories/249', engine: {} });
     expect(payload.reclaim_mileage).toBe(0);
     expect(payload.engine_type).toBeUndefined();
     expect(payload.vehicle_type).toBe('Bicycle');
