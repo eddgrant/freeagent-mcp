@@ -79,6 +79,13 @@ describe('validateCreateExpenseInput', () => {
       attachment: { file_name: 'r.pdf', content_type: 'application/pdf' },
     })).toThrow(/attachment.evidence_path is required/);
   });
+
+  it('rejects sales_tax_value — it is read-only in FreeAgent — and points at manual_sales_tax_amount', () => {
+    expect(() => validateCreateExpenseInput({
+      category: 'Travel', dated_on: '2026-05-01', gross_value: 245.88,
+      sales_tax_status: 'TAXABLE', sales_tax_value: '2.63',
+    })).toThrow(/sales_tax_value cannot be set.*manual_sales_tax_amount/s);
+  });
 });
 
 describe('buildExpensePayload', () => {
@@ -136,6 +143,16 @@ describe('validateUpdateExpenseInput / buildExpenseUpdatePayload', () => {
   it('includes resolved category/user URLs only when supplied', () => {
     const input = validateUpdateExpenseInput({ id: '5', category: 'Travel' });
     expect(buildExpenseUpdatePayload(input, { category: CATEGORY })).toEqual({ category: CATEGORY });
+  });
+
+  it('rejects sales_tax_value on update too', () => {
+    expect(() => validateUpdateExpenseInput({ id: '5', sales_tax_value: '2.63' }))
+      .toThrow(/sales_tax_value cannot be set.*manual_sales_tax_amount/s);
+  });
+
+  it('sets a fixed VAT amount via manual_sales_tax_amount', () => {
+    const input = validateUpdateExpenseInput({ id: '5', manual_sales_tax_amount: '2.63' });
+    expect(buildExpenseUpdatePayload(input, {}).manual_sales_tax_amount).toBe('2.63');
   });
 });
 

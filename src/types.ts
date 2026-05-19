@@ -504,8 +504,9 @@ export interface ExpenseCreatePayload {
     description?: string;
     receipt_reference?: string;
     sales_tax_rate?: string;
-    sales_tax_value?: string;
     sales_tax_status?: string;
+    // No sales_tax_value: it is read-only in the FreeAgent API (server-
+    // computed). manual_sales_tax_amount is the writable fixed-VAT field.
     manual_sales_tax_amount?: string;
     ec_status?: string;
     project?: string;
