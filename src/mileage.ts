@@ -63,7 +63,7 @@ function validateAttachmentInput(value: unknown): ExpenseAttachmentInput {
     if (typeof value !== 'object' || value == null) throw new Error('attachment must be an object');
     const a = value as Record<string, unknown>;
     if (typeof a.evidence_path !== 'string' || a.evidence_path.trim() === '') {
-        throw new Error('attachment.evidence_path is required (a path returned by stage_evidence)');
+        throw new Error('attachment.evidence_path is required (a path inside the staging directory from get_staging_directory)');
     }
     if (typeof a.file_name !== 'string' || a.file_name.trim() === '') {
         throw new Error('attachment.file_name is required');

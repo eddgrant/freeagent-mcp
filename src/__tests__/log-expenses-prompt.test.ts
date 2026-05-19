@@ -31,17 +31,17 @@ describe('buildLogExpensesPromptBody', () => {
         const body = buildLogExpensesPromptBody(STAGING_READY);
         expect(body).toContain('/tmp/freeagent-mcp/abc123');
         expect(body).toMatch(/STAGE RECEIPT ATTACHMENTS/);
-        // Direct copy is promoted over base64; downscaling only past 5 MB.
+        // Direct copy is the route; downscaling only past 5 MB; no base64.
         expect(body).toMatch(/copy the file into that directory/);
         expect(body).toMatch(/5 MB/);
-        expect(body).toMatch(/fall back to stage_evidence/i);
+        expect(body).toMatch(/do not base64-encode/i);
     });
 
     it('emits a clear unavailable note when staging is not ready', () => {
         const body = buildLogExpensesPromptBody(STAGING_NOT_READY);
         expect(body).toMatch(/STAGE RECEIPT ATTACHMENTS — UNAVAILABLE THIS SESSION/);
         expect(body).toContain('EACCES: permission denied');
-        expect(body).not.toContain('call stage_evidence with\n   the bytes');
+        expect(body).toMatch(/receipts cannot be attached/);
     });
 
     it('echoes the claimant argument when supplied', () => {
