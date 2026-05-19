@@ -209,7 +209,7 @@ export class FreeAgentServer {
     );
 
     s.registerTool('get_current_user',
-      { description: 'Get the currently authenticated user' },
+      { description: 'Get the currently authenticated user', inputSchema: toolSchemas.get_current_user },
       async () => json(await c.getCurrentUser()),
     );
 
@@ -346,7 +346,7 @@ export class FreeAgentServer {
     );
 
     s.registerTool('list_bank_accounts',
-      { description: 'List all bank accounts' },
+      { description: 'List all bank accounts', inputSchema: toolSchemas.list_bank_accounts },
       async () => json(await c.listBankAccounts()),
     );
 
@@ -389,6 +389,7 @@ export class FreeAgentServer {
           'reduce a file only if it genuinely exceeds that.) Returns { ready: false, path: null } ' +
           'when the shared volume is not mounted, in which case receipt attachments are ' +
           'unavailable until it is set up (the expense can still be created without one).',
+        inputSchema: toolSchemas.get_staging_directory,
       },
       async () => json({
         ready: this.stagingState.ready,
@@ -522,6 +523,7 @@ export class FreeAgentServer {
           'Get the FreeAgent mileage settings — the valid engine types, engine sizes, and ' +
           'mileage rates, scoped by date period. Use this to discover valid engine_type and ' +
           'engine_size values before calling create_mileage_expense.',
+        inputSchema: toolSchemas.get_mileage_settings,
       },
       async () => json(await c.getMileageSettings()),
     );
