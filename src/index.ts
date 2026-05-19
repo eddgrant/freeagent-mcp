@@ -538,7 +538,13 @@ export class FreeAgentServer {
         inputSchema: toolSchemas.create_mileage_expense,
       },
       async (args) => {
-        const userUrl = await resolveUser(c, args.user);
+        // FreeAgent's /expenses endpoint rejects the bare word "Mileage" as
+        // a nominal code, so resolve it to the Mileage category URL — the
+        // same name->URL resolution create_expense uses.
+        const [userUrl, categoryUrl] = await Promise.all([
+          resolveUser(c, args.user),
+          resolveCategory(c, 'Mileage'),
+        ]);
 
         // Engine type/size validated against the dated mileage settings.
         // Bicycles carry no engine fields; if the settings can't be fetched,
@@ -558,7 +564,7 @@ export class FreeAgentServer {
         const attachment = args.attachment
           ? readStagedAttachment(args.attachment, this.stagingState.sessionPath)
           : undefined;
-        return json(await c.createExpense(buildMileagePayload(args, { user: userUrl, engine, attachment })));
+        return json(await c.createExpense(buildMileagePayload(args, { user: userUrl, category: categoryUrl, engine, attachment })));
       },
     );
   }

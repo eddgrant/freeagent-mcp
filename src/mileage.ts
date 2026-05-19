@@ -1,10 +1,12 @@
 // Mileage-claim handling for the expense tools.
 //
-// A FreeAgent mileage claim is an expense with category "Mileage" and a
-// different field set: mileage, vehicle_type, and — for cars and
+// A FreeAgent mileage claim is an expense booked to the "Mileage" category
+// with a different field set: mileage, vehicle_type, and — for cars and
 // motorcycles — engine_type + engine_size. The valid engine types and
 // sizes change over time (HMRC revisions), so they are validated against
-// GET /expenses/mileage_settings for the claim date.
+// GET /expenses/mileage_settings for the claim date. The "Mileage" category
+// is resolved to its API URL by the caller — FreeAgent's /expenses endpoint
+// rejects the bare word "Mileage" with "Invalid nominal code Mileage".
 //
 // Tool input shape is validated by the Zod schema in tool-schemas.ts;
 // this module holds the date-scoped engine resolution and payload build.
@@ -113,12 +115,12 @@ export function resolveEngine(
 /** Build the FreeAgent wire payload for a mileage claim. */
 export function buildMileagePayload(
     input: CreateMileageExpenseInput,
-    refs: { user: string; engine: ResolvedEngine; attachment?: ExpenseAttachmentPayload },
+    refs: { user: string; category: string; engine: ResolvedEngine; attachment?: ExpenseAttachmentPayload },
 ): ExpenseCreatePayload {
     const payload: ExpenseCreatePayload = {
         user: refs.user,
         dated_on: input.dated_on,
-        category: 'Mileage',
+        category: refs.category,
         mileage: String(input.mileage),
         vehicle_type: input.vehicle_type,
         // Default: reclaim at the AMAP rate unless explicitly disabled.
