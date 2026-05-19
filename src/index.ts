@@ -15,7 +15,6 @@ import { TimeslipAttributes, InvoiceAttributes, ProjectAttributes } from './type
 import { validateId, validateTimeslipAttributes, validateInvoiceItemAttributes, validateInvoiceAttributes, validateProjectAttributes, validateTaskAttributes, normaliseProjectIds, normaliseNumberingSource, buildInvoicePayload, ORG_WIDE_NUMBERING } from './validation.js';
 import { installLifecycleHandlers, type Closable } from './lifecycle.js';
 import { setupStaging, cleanupStaging, type StagingState } from './evidence-staging.js';
-import { stageEvidence, ALLOWED_CONTENT_TYPES } from './stage-evidence.js';
 import {
   buildLogExpensesPromptBody,
   PROMPT_NAME as LOG_EXPENSES_PROMPT_NAME,
@@ -645,37 +644,12 @@ export class FreeAgentServer {
             'This is the fast, lossless route — copy the original at full quality, no base64 and ' +
             'no downscaling to save tokens. (FreeAgent still rejects attachments over 5 MB, so ' +
             'reduce a file only if it genuinely exceeds that.) Returns { ready: false, path: null } ' +
-            'when the shared volume is not mounted; in that case fall back to stage_evidence.',
+            'when the shared volume is not mounted, in which case receipt attachments are ' +
+            'unavailable until it is set up (the expense can still be created without one).',
           inputSchema: {
             type: 'object' as const,
             properties: {}
           }
-        },
-        {
-          name: 'stage_evidence',
-          description:
-            'FALLBACK for attaching a receipt when you cannot write to the staging directory ' +
-            'yourself. Accepts base64-encoded bytes inline (≤5 MB), writes them to the session ' +
-            'staging directory, and returns the on-disk path to pass as attachment.evidence_path. ' +
-            'PREFER copying the file directly: call get_staging_directory, copy your file into ' +
-            'that directory, and pass the path — that is faster and lossless, whereas passing ' +
-            'bytes here forces large images to be downscaled to fit model context. ' +
-            'Requires the shared evidence volume to be mounted; returns ' +
-            '{ ok: false, error: { code: "staging_volume_not_mounted" } } if not. ' +
-            'Returns a structured { ok: true | false, ... } result; never throws for business-logic errors.',
-          inputSchema: {
-            type: 'object' as const,
-            properties: {
-              data: { type: 'string', description: 'Base64-encoded file bytes (≤5 MB decoded).' },
-              file_name: { type: 'string', description: 'Suggested filename. Server sanitises and prefixes with a random suffix to avoid collisions.' },
-              content_type: {
-                type: 'string',
-                description: 'MIME type. Must be one of: image/jpeg, image/png, image/gif, application/pdf. Magic bytes are verified against this claim.',
-                enum: [...ALLOWED_CONTENT_TYPES],
-              },
-            },
-            required: ['data', 'file_name', 'content_type'],
-          },
         },
         {
           name: 'list_expenses',
@@ -744,9 +718,9 @@ export class FreeAgentServer {
               property: { type: 'string', description: 'Property URL — required for UkUnincorporatedLandlord companies, ignored otherwise.' },
               attachment: {
                 type: 'object',
-                description: 'Optional receipt. Preferred: call get_staging_directory, copy the file into that directory, and pass its path as evidence_path. Or use stage_evidence to upload base64 bytes.',
+                description: 'Optional receipt. Call get_staging_directory, copy the file into that directory, and pass its path as evidence_path.',
                 properties: {
-                  evidence_path: { type: 'string', description: 'Absolute path to the receipt file inside the session staging directory — from get_staging_directory (copy the file there yourself) or returned by stage_evidence.' },
+                  evidence_path: { type: 'string', description: 'Absolute path to the receipt file inside the session staging directory — call get_staging_directory, then copy the file there yourself.' },
                   file_name: { type: 'string', description: 'File name for the attachment' },
                   content_type: { type: 'string', description: 'MIME type, e.g. image/jpeg, image/png, application/pdf' },
                   description: { type: 'string', description: 'Optional attachment description' }
@@ -792,9 +766,9 @@ export class FreeAgentServer {
               property: { type: 'string', description: 'Property URL (UkUnincorporatedLandlord companies)' },
               attachment: {
                 type: 'object',
-                description: 'Replacement receipt. Preferred: call get_staging_directory, copy the file into that directory, and pass its path as evidence_path. Or use stage_evidence to upload base64 bytes.',
+                description: 'Replacement receipt. Call get_staging_directory, copy the file into that directory, and pass its path as evidence_path.',
                 properties: {
-                  evidence_path: { type: 'string', description: 'Absolute path to the receipt file inside the session staging directory — from get_staging_directory (copy the file there yourself) or returned by stage_evidence.' },
+                  evidence_path: { type: 'string', description: 'Absolute path to the receipt file inside the session staging directory — call get_staging_directory, then copy the file there yourself.' },
                   file_name: { type: 'string', description: 'File name for the attachment' },
                   content_type: { type: 'string', description: 'MIME type, e.g. image/jpeg, image/png, application/pdf' },
                   description: { type: 'string', description: 'Optional attachment description' }
@@ -850,9 +824,9 @@ export class FreeAgentServer {
               have_vat_receipt: { type: 'boolean', description: 'Whether a VAT receipt is held for the fuel' },
               attachment: {
                 type: 'object',
-                description: 'Optional supporting document. Preferred: call get_staging_directory, copy the file into that directory, and pass its path as evidence_path. Or use stage_evidence to upload base64 bytes.',
+                description: 'Optional supporting document. Call get_staging_directory, copy the file into that directory, and pass its path as evidence_path.',
                 properties: {
-                  evidence_path: { type: 'string', description: 'Absolute path to the receipt file inside the session staging directory — from get_staging_directory (copy the file there yourself) or returned by stage_evidence.' },
+                  evidence_path: { type: 'string', description: 'Absolute path to the receipt file inside the session staging directory — call get_staging_directory, then copy the file there yourself.' },
                   file_name: { type: 'string', description: 'File name for the attachment' },
                   content_type: { type: 'string', description: 'MIME type, e.g. image/jpeg, image/png, application/pdf' },
                   description: { type: 'string', description: 'Optional attachment description' }
@@ -1292,29 +1266,6 @@ export class FreeAgentServer {
               path: this.stagingState.sessionPath,
               ...(this.stagingState.reason ? { reason: this.stagingState.reason } : {}),
             };
-            return { content: [{ type: 'text' as const, text: JSON.stringify(body, null, 2) }] };
-          }
-
-          case 'stage_evidence': {
-            const args = request.params.arguments as {
-              data?: unknown;
-              file_name?: unknown;
-              content_type?: unknown;
-            };
-            // Light schema-guard. The MCP SDK validates required+type, but
-            // a defensive cast here avoids passing garbage to the pure
-            // staging function and producing a less actionable error.
-            if (typeof args?.data !== 'string' || typeof args?.file_name !== 'string' || typeof args?.content_type !== 'string') {
-              const body = { ok: false as const, error: { code: 'invalid_arguments', message: 'data, file_name, content_type are required strings' } };
-              return { content: [{ type: 'text' as const, text: JSON.stringify(body, null, 2) }] };
-            }
-            const outcome = stageEvidence(
-              { data: args.data, file_name: args.file_name, content_type: args.content_type },
-              { sessionPath: this.stagingState.sessionPath },
-            );
-            const body = outcome.ok
-              ? { ok: true as const, ...outcome.result }
-              : { ok: false as const, error: outcome.error };
             return { content: [{ type: 'text' as const, text: JSON.stringify(body, null, 2) }] };
           }
 

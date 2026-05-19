@@ -52,7 +52,7 @@ Mileage claims use `create_mileage_expense`: give the miles, vehicle type, and �
 
 `create_expense` and `update_expense` also handle the advanced modes: **rebillable** expenses (associate with a `project`, optionally `rebill_type` cost/markup/price), **recurring** expenses (a `recurring` frequency), and **foreign-currency** expenses (`currency` plus an optional native-currency amount). `create_expenses` posts a whole batch in one call.
 
-Receipts attach via an opt-in staging volume (see [Optional: enable receipt attachments](#optional-enable-receipt-attachments)). The staging directory is a shared folder, so the agent calls `get_staging_directory`, copies the receipt file in directly, and passes that path to `create_expense` — fast and lossless. `stage_evidence` (base64 upload) is the fallback for when the agent can't write to the volume. FreeAgent caps attachments at 5 MB.
+Receipts attach via an opt-in staging volume (see [Optional: enable receipt attachments](#optional-enable-receipt-attachments)). The staging directory is a shared folder, so the agent calls `get_staging_directory`, copies the receipt file in directly, and passes that path to `create_expense` — fast and lossless, no base64 round-trip. FreeAgent caps attachments at 5 MB.
 
 ### Projects & Tasks
 - "Set up a new project for Client Foo with a day rate of £123"
@@ -247,7 +247,6 @@ Required env vars in your shell: `FREEAGENT_CLIENT_ID`, `FREEAGENT_CLIENT_SECRET
 | `list_users`                         | List users in the organisation                                                        |
 | `get_current_user`                   | Get the currently authenticated user                                                  |
 | `get_staging_directory`              | Report the session staging directory for copying receipt files in directly             |
-| `stage_evidence`                     | Fallback: upload a base64 receipt file to the staging dir when direct copy isn't possible |
 | `list_expenses`                      | List expenses with optional date, project, view, and claimant filters                  |
 | `get_expense`                        | Get a single expense by ID                                                             |
 | `create_expense`                     | Create an employee expense (category/claimant by name, receipts via staging)            |

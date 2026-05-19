@@ -47,15 +47,13 @@ export function buildLogExpensesPromptBody(
    with cp) and pass its path as the expense's attachment.evidence_path.
    Copy the original at full quality — do not base64-encode it, and do
    not downscale it to save tokens. FreeAgent does reject attachments
-   over 5 MB, so reduce a file ONLY if it genuinely exceeds that limit.
-   Fall back to stage_evidence (base64 upload) only if you cannot write
-   to that directory.`
+   over 5 MB, so reduce a file ONLY if it genuinely exceeds that limit.`
         : `6. STAGE RECEIPT ATTACHMENTS — UNAVAILABLE THIS SESSION
    The shared evidence volume is not mounted (${staging.reason ?? 'no FREEAGENT_EVIDENCE_BASE'}),
-   so stage_evidence would refuse. Create the expenses without
-   attachments and tell the user the receipts are not being uploaded;
-   they can enable attachments by setting up the volume mount per the
-   README.`;
+   so receipts cannot be attached this session. Create the expenses
+   without attachments and tell the user the receipts are not being
+   uploaded; they can enable attachments by setting up the volume mount
+   per the README.`;
 
     return `You are logging employee expenses in FreeAgent. Work through these
 steps. Do not write to FreeAgent without explicit user approval.

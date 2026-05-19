@@ -149,3 +149,40 @@ export function validateEvidencePath(
 
     return { ok: true, size: stat.size };
 }
+
+// =============================================================================
+// Content-type detection
+// Verifies a staged file's real type from its magic bytes — used to check the
+// caller's declared content_type before the file is attached to FreeAgent.
+// =============================================================================
+
+export const ALLOWED_CONTENT_TYPES = [
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'application/pdf',
+] as const;
+export type AllowedContentType = (typeof ALLOWED_CONTENT_TYPES)[number];
+
+/** Detect the MIME type of `bytes` from its magic numbers. Returns one of the
+ *  allowed content types, or undefined if the bytes match none of them. */
+export function detectMimeType(bytes: Buffer): AllowedContentType | undefined {
+    if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+        return 'image/jpeg';
+    }
+    if (
+        bytes.length >= 8 &&
+        bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+        bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+    ) {
+        return 'image/png';
+    }
+    if (bytes.length >= 6) {
+        const head = bytes.subarray(0, 6).toString('ascii');
+        if (head === 'GIF87a' || head === 'GIF89a') return 'image/gif';
+    }
+    if (bytes.length >= 5 && bytes.subarray(0, 5).toString('ascii') === '%PDF-') {
+        return 'application/pdf';
+    }
+    return undefined;
+}

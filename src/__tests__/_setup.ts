@@ -60,7 +60,7 @@ export async function connectTestMcpClient(
     options?: { stagingSessionPath?: string | null },
 ): Promise<Client> {
     // Opt out of real-staging side effects by default. Tests that need
-    // a working stage_evidence pass a real temp dir via options.
+    // a ready staging directory pass a real temp dir via options.
     const stagingState = {
         ready: options?.stagingSessionPath != null,
         base: '',

@@ -11,8 +11,7 @@
 
 import * as fs from 'node:fs';
 import type { ExpenseCreatePayload, ExpenseAttachmentPayload } from './types.js';
-import { validateEvidencePath } from './evidence-staging.js';
-import { detectMimeType, ALLOWED_CONTENT_TYPES } from './stage-evidence.js';
+import { validateEvidencePath, detectMimeType, ALLOWED_CONTENT_TYPES } from './evidence-staging.js';
 
 export const SALES_TAX_STATUSES = ['TAXABLE', 'EXEMPT', 'OUT_OF_SCOPE'] as const;
 export type SalesTaxStatus = (typeof SALES_TAX_STATUSES)[number];
@@ -27,7 +26,8 @@ export const RECURRING_FREQUENCIES = [
 export type RecurringFrequency = (typeof RECURRING_FREQUENCIES)[number];
 
 /** Receipt attachment as referenced by curated tool input — a path to a
- *  file already staged via stage_evidence, plus its metadata. */
+ *  file the caller has copied into the session staging directory, plus
+ *  its metadata. */
 export interface ExpenseAttachmentInput {
     evidence_path: string;
     file_name: string;
@@ -145,7 +145,7 @@ function validateAttachmentInput(value: unknown): ExpenseAttachmentInput {
     }
     const a = value as Record<string, unknown>;
     if (typeof a.evidence_path !== 'string' || a.evidence_path.trim() === '') {
-        throw new Error('attachment.evidence_path is required (a path returned by stage_evidence)');
+        throw new Error('attachment.evidence_path is required (a path inside the staging directory from get_staging_directory)');
     }
     if (typeof a.file_name !== 'string' || a.file_name.trim() === '') {
         throw new Error('attachment.file_name is required');
@@ -338,11 +338,10 @@ export function buildExpenseUpdatePayload(
     return payload;
 }
 
-/** Read a staged receipt file — placed in the staging directory either by a
- *  direct copy or by stage_evidence — and turn it into an attachment payload.
- *  validateEvidencePath provides the path-traversal, symlink and size
- *  defences; the magic-byte check verifies the file's real type matches the
- *  declared content_type (the direct-copy route has no other content check).
+/** Read a receipt file the caller has copied into the session staging
+ *  directory and turn it into an attachment payload. validateEvidencePath
+ *  provides the path-traversal, symlink and size defences; the magic-byte
+ *  check verifies the file's real type matches the declared content_type.
  *  Throws — rather than silently dropping the receipt — on any failure. */
 export function readStagedAttachment(
     input: ExpenseAttachmentInput,

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { setupStaging, cleanupStaging } from '../evidence-staging.js';
+import { setupStaging, cleanupStaging, detectMimeType } from '../evidence-staging.js';
 
 describe('evidence-staging', () => {
     let tmpBase: string;
@@ -150,5 +150,30 @@ describe('evidence-staging', () => {
             cleanupStaging(state);
             expect(() => cleanupStaging(state)).not.toThrow();
         });
+    });
+});
+
+describe('detectMimeType', () => {
+    it('detects JPEG from its magic bytes', () => {
+        expect(detectMimeType(Buffer.from([0xff, 0xd8, 0xff, 0x00]))).toBe('image/jpeg');
+    });
+
+    it('detects PNG from its 8-byte signature', () => {
+        expect(detectMimeType(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])))
+            .toBe('image/png');
+    });
+
+    it('detects GIF (both GIF87a and GIF89a)', () => {
+        expect(detectMimeType(Buffer.from('GIF87a...', 'ascii'))).toBe('image/gif');
+        expect(detectMimeType(Buffer.from('GIF89a...', 'ascii'))).toBe('image/gif');
+    });
+
+    it('detects PDF from the %PDF- header', () => {
+        expect(detectMimeType(Buffer.from('%PDF-1.7 ...', 'ascii'))).toBe('application/pdf');
+    });
+
+    it('returns undefined for bytes matching no known type', () => {
+        expect(detectMimeType(Buffer.from('just plain text', 'ascii'))).toBeUndefined();
+        expect(detectMimeType(Buffer.from([]))).toBeUndefined();
     });
 });
