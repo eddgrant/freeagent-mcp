@@ -53,6 +53,16 @@ export class FreeAgentClient {
                     await new Promise(r => setTimeout(r, delay));
                     return this.axiosInstance.request(cfg);
                 }
+                // Surface the FreeAgent API error body. axios's own
+                // error.message is only "Request failed with status code N";
+                // the actionable detail lives in error.response.data. Rewrite
+                // the message here, once, so every endpoint and every caller
+                // (handlers and logs alike) sees why the request failed.
+                if (error.response) {
+                    const detail = extractFreeAgentError(error.response.data);
+                    error.message = `FreeAgent API ${error.response.status}`
+                        + (detail ? `: ${detail}` : '');
+                }
                 return Promise.reject(error);
             }
         );
@@ -666,4 +676,37 @@ function summariseExpenseForLog(expense: Partial<ExpenseCreatePayload>): Record<
             bytes: attachment.data.length,
         },
     };
+}
+
+// Pull a human-readable message out of a FreeAgent API error body.
+// FreeAgent reports errors in a few shapes — { errors: { error: { message } } },
+// { errors: { <field>: ["..."] } }, { error: { message } }, a bare string — so
+// walk the `errors`/`error` subtree collecting every string and `message` we
+// find, and fall back to the stringified body. Returns '' when the body holds
+// nothing useful (the caller then reports just the HTTP status).
+export function extractFreeAgentError(data: unknown): string {
+    if (data == null) return '';
+    if (typeof data === 'string') return data.trim();
+    if (typeof data !== 'object') return String(data);
+
+    const messages: string[] = [];
+    const collect = (value: unknown): void => {
+        if (value == null) return;
+        if (typeof value === 'string') { messages.push(value); return; }
+        if (Array.isArray(value)) { value.forEach(collect); return; }
+        if (typeof value === 'object') {
+            const msg = (value as Record<string, unknown>).message;
+            if (typeof msg === 'string') { messages.push(msg); return; }
+            Object.values(value as Record<string, unknown>).forEach(collect);
+            return;
+        }
+        messages.push(String(value));
+    };
+
+    const body = data as Record<string, unknown>;
+    const node = body.errors ?? body.error;
+    if (node !== undefined) collect(node);
+    if (messages.length > 0) return [...new Set(messages)].join('; ');
+
+    try { return JSON.stringify(body); } catch { return ''; }
 }

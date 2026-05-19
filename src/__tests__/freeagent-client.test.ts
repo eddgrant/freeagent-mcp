@@ -741,6 +741,55 @@ describe('429 retry interceptor', () => {
   });
 });
 
+describe('API error enrichment', () => {
+  it('rewrites the error message with the FreeAgent error body (nested shape)', async () => {
+    const errorHandler = mockInterceptors.response.use.mock.calls[0][1];
+    const error: any = {
+      response: { status: 422, data: { errors: { error: { message: 'Engine type is invalid' } } } },
+      config: { headers: {} },
+    };
+
+    await expect(errorHandler(error)).rejects.toBe(error);
+
+    expect(error.message).toContain('422');
+    expect(error.message).toContain('Engine type is invalid');
+  });
+
+  it('collects per-field validation messages from the error body', async () => {
+    const errorHandler = mockInterceptors.response.use.mock.calls[0][1];
+    const error: any = {
+      response: { status: 400, data: { errors: { dated_on: ['is not a valid date'] } } },
+      config: { headers: {} },
+    };
+
+    await expect(errorHandler(error)).rejects.toBe(error);
+
+    expect(error.message).toContain('is not a valid date');
+  });
+
+  it('falls back to the stringified body when no errors/error key is present', async () => {
+    const errorHandler = mockInterceptors.response.use.mock.calls[0][1];
+    const error: any = {
+      response: { status: 500, data: { something: 'unexpected' } },
+      config: { headers: {} },
+    };
+
+    await expect(errorHandler(error)).rejects.toBe(error);
+
+    expect(error.message).toContain('500');
+    expect(error.message).toContain('unexpected');
+  });
+
+  it('leaves a non-HTTP error (no response) untouched', async () => {
+    const errorHandler = mockInterceptors.response.use.mock.calls[0][1];
+    const error: any = new Error('socket hang up');
+
+    await expect(errorHandler(error)).rejects.toBe(error);
+
+    expect(error.message).toBe('socket hang up');
+  });
+});
+
 describe('expenses', () => {
   const payload = {
     user: 'https://api.freeagent.com/v2/users/1',
