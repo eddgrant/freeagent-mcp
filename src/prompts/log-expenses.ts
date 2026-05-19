@@ -41,11 +41,15 @@ export function buildLogExpensesPromptBody(
 
     const stageStep = staging.ready && staging.sessionPath
         ? `6. STAGE RECEIPT ATTACHMENTS
-   For each receipt the user wants attached, call stage_evidence with
-   the bytes and intended filename, then pass the returned path as the
-   expense's \`attachment.evidence_path\`. The staging directory for
-   this session is ${staging.sessionPath}; stage_evidence sanitises
-   filenames and adds a random prefix automatically.`
+   The session staging directory is ${staging.sessionPath} — a shared
+   folder both you and the server can read. For each receipt the user
+   wants attached, copy the file into that directory yourself (e.g.
+   with cp) and pass its path as the expense's attachment.evidence_path.
+   Copy the original at full quality — do not base64-encode it, and do
+   not downscale it to save tokens. FreeAgent does reject attachments
+   over 5 MB, so reduce a file ONLY if it genuinely exceeds that limit.
+   Fall back to stage_evidence (base64 upload) only if you cannot write
+   to that directory.`
         : `6. STAGE RECEIPT ATTACHMENTS — UNAVAILABLE THIS SESSION
    The shared evidence volume is not mounted (${staging.reason ?? 'no FREEAGENT_EVIDENCE_BASE'}),
    so stage_evidence would refuse. Create the expenses without

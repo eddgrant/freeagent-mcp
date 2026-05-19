@@ -60,6 +60,13 @@ describe('stage_evidence (via MCP)', () => {
       expect(parsed.ok).toBe(false);
       expect(parsed.error?.code).toBe('magic_byte_mismatch');
     });
+
+    it('get_staging_directory reports the live session path', async () => {
+      const result = await client.callTool({ name: 'get_staging_directory', arguments: {} });
+      const parsed = parseResult(result) as { ready: boolean; path: string | null };
+      expect(parsed.ready).toBe(true);
+      expect(parsed.path).toBe(stagingDir);
+    });
   });
 
   describe('with staging not mounted', () => {

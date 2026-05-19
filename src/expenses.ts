@@ -12,6 +12,7 @@
 import * as fs from 'node:fs';
 import type { ExpenseCreatePayload, ExpenseAttachmentPayload } from './types.js';
 import { validateEvidencePath } from './evidence-staging.js';
+import { detectMimeType, ALLOWED_CONTENT_TYPES } from './stage-evidence.js';
 
 export const SALES_TAX_STATUSES = ['TAXABLE', 'EXEMPT', 'OUT_OF_SCOPE'] as const;
 export type SalesTaxStatus = (typeof SALES_TAX_STATUSES)[number];
@@ -337,10 +338,12 @@ export function buildExpenseUpdatePayload(
     return payload;
 }
 
-/** Read a receipt that was staged via stage_evidence and turn it into an
- *  attachment payload. Reuses validateEvidencePath for the path-traversal,
- *  symlink and size defences. Throws (rather than silently dropping the
- *  receipt) when staging is unavailable or the path fails validation. */
+/** Read a staged receipt file — placed in the staging directory either by a
+ *  direct copy or by stage_evidence — and turn it into an attachment payload.
+ *  validateEvidencePath provides the path-traversal, symlink and size
+ *  defences; the magic-byte check verifies the file's real type matches the
+ *  declared content_type (the direct-copy route has no other content check).
+ *  Throws — rather than silently dropping the receipt — on any failure. */
 export function readStagedAttachment(
     input: ExpenseAttachmentInput,
     stagingPath: string | null,
@@ -354,10 +357,27 @@ export function readStagedAttachment(
     }
     const check = validateEvidencePath(input.evidence_path, stagingPath);
     if (!check.ok) {
+        if (check.reason.startsWith('too_large:')) {
+            const bytes = check.reason.slice('too_large:'.length);
+            throw new Error(
+                `attachment is too large (${bytes} bytes). FreeAgent rejects expense ` +
+                `attachments over 5 MB — downscale or recompress the file and retry.`,
+            );
+        }
         throw new Error(`attachment validation failed: ${check.reason}`);
     }
     const readFile = deps.readFile ?? ((p: string) => fs.readFileSync(p));
     const bytes = readFile(input.evidence_path);
+
+    const detected = detectMimeType(bytes);
+    if (detected !== input.content_type) {
+        throw new Error(
+            `attachment content-type mismatch: declared "${input.content_type}" but the ` +
+            `file's bytes are ${detected ?? 'an unrecognised type'}. Allowed types: ` +
+            `${ALLOWED_CONTENT_TYPES.join(', ')}.`,
+        );
+    }
+
     const out: ExpenseAttachmentPayload = {
         data: bytes.toString('base64'),
         file_name: input.file_name,
