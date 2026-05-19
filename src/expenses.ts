@@ -61,10 +61,12 @@ export interface CreateExpenseInput extends AdvancedExpenseFields {
     description?: string;
     receipt_reference?: string;
     sales_tax_rate?: string;
-    sales_tax_value?: string;
     sales_tax_status?: SalesTaxStatus;
     ec_status?: string;
     attachment?: ExpenseAttachmentInput;
+    // Note: there is no sales_tax_value field — it is read-only in the
+    // FreeAgent API. manual_sales_tax_amount (on AdvancedExpenseFields) is
+    // the writable field for a fixed VAT amount.
 }
 
 /** Validated curated input for updating an existing expense. Every field
@@ -78,7 +80,6 @@ export interface UpdateExpenseInput extends AdvancedExpenseFields {
     description?: string;
     receipt_reference?: string;
     sales_tax_rate?: string;
-    sales_tax_value?: string;
     sales_tax_status?: SalesTaxStatus;
     ec_status?: string;
     attachment?: ExpenseAttachmentInput;
@@ -173,6 +174,20 @@ function rejectMileageCategory(category: string): void {
     }
 }
 
+// sales_tax_value is read-only in the FreeAgent API — server-computed from
+// sales_tax_rate or manual_sales_tax_amount. Accepting it as input would
+// silently discard the caller's value, so reject it loudly and point at the
+// writable field instead.
+function rejectSalesTaxValue(a: Record<string, unknown>): void {
+    if (a.sales_tax_value !== undefined) {
+        throw new Error(
+            'sales_tax_value cannot be set — FreeAgent computes it server-side from ' +
+            'sales_tax_rate or manual_sales_tax_amount. To set an exact VAT amount, use ' +
+            'manual_sales_tax_amount instead.',
+        );
+    }
+}
+
 // Read the advanced (rebilling / recurring / foreign-currency) fields off
 // the raw arguments onto `target`. `crossCheck` enforces the inter-field
 // rules — applied on create (the full picture is present) but skipped on
@@ -237,7 +252,7 @@ export function validateCreateExpenseInput(data: unknown): CreateExpenseInput {
     if (typeof a.description === 'string') input.description = a.description;
     if (typeof a.receipt_reference === 'string') input.receipt_reference = a.receipt_reference;
     if (typeof a.sales_tax_rate === 'string') input.sales_tax_rate = a.sales_tax_rate;
-    if (typeof a.sales_tax_value === 'string') input.sales_tax_value = a.sales_tax_value;
+    rejectSalesTaxValue(a);
     if (a.sales_tax_status !== undefined) input.sales_tax_status = validateSalesTaxStatus(a.sales_tax_status);
     if (typeof a.ec_status === 'string') input.ec_status = a.ec_status;
     if (a.attachment !== undefined) input.attachment = validateAttachmentInput(a.attachment);
@@ -264,7 +279,7 @@ export function validateUpdateExpenseInput(data: unknown): UpdateExpenseInput {
     if (typeof a.description === 'string') input.description = a.description;
     if (typeof a.receipt_reference === 'string') input.receipt_reference = a.receipt_reference;
     if (typeof a.sales_tax_rate === 'string') input.sales_tax_rate = a.sales_tax_rate;
-    if (typeof a.sales_tax_value === 'string') input.sales_tax_value = a.sales_tax_value;
+    rejectSalesTaxValue(a);
     if (a.sales_tax_status !== undefined) input.sales_tax_status = validateSalesTaxStatus(a.sales_tax_status);
     if (typeof a.ec_status === 'string') input.ec_status = a.ec_status;
     if (a.attachment !== undefined) input.attachment = validateAttachmentInput(a.attachment);
@@ -306,7 +321,6 @@ export function buildExpensePayload(
     if (input.description) payload.description = input.description;
     if (input.receipt_reference) payload.receipt_reference = input.receipt_reference;
     if (input.sales_tax_rate) payload.sales_tax_rate = input.sales_tax_rate;
-    if (input.sales_tax_value) payload.sales_tax_value = input.sales_tax_value;
     if (input.sales_tax_status) payload.sales_tax_status = input.sales_tax_status;
     if (input.ec_status) payload.ec_status = input.ec_status;
     if (refs.attachment) payload.attachment = refs.attachment;
@@ -330,7 +344,6 @@ export function buildExpenseUpdatePayload(
     if (input.description !== undefined) payload.description = input.description;
     if (input.receipt_reference !== undefined) payload.receipt_reference = input.receipt_reference;
     if (input.sales_tax_rate !== undefined) payload.sales_tax_rate = input.sales_tax_rate;
-    if (input.sales_tax_value !== undefined) payload.sales_tax_value = input.sales_tax_value;
     if (input.sales_tax_status !== undefined) payload.sales_tax_status = input.sales_tax_status;
     if (input.ec_status !== undefined) payload.ec_status = input.ec_status;
     if (refs.attachment) payload.attachment = refs.attachment;
