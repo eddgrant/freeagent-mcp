@@ -5,13 +5,45 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import {
   CallToolRequestSchema,
   ErrorCode,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { FreeAgentClient } from './freeagent-client.js';
 import { TimeslipAttributes, InvoiceAttributes, ProjectAttributes } from './types.js';
 import { validateId, validateTimeslipAttributes, validateInvoiceItemAttributes, validateInvoiceAttributes, validateProjectAttributes, validateTaskAttributes, normaliseProjectIds, normaliseNumberingSource, buildInvoicePayload, ORG_WIDE_NUMBERING } from './validation.js';
-import { installLifecycleHandlers } from './lifecycle.js';
+import { installLifecycleHandlers, type Closable } from './lifecycle.js';
+import { setupStaging, cleanupStaging, type StagingState } from './evidence-staging.js';
+import { stageEvidence, ALLOWED_CONTENT_TYPES } from './stage-evidence.js';
+import {
+  buildLogExpensesPromptBody,
+  PROMPT_NAME as LOG_EXPENSES_PROMPT_NAME,
+  PROMPT_DESCRIPTION as LOG_EXPENSES_PROMPT_DESCRIPTION,
+  PROMPT_ARGUMENTS as LOG_EXPENSES_PROMPT_ARGUMENTS,
+  type LogExpensesPromptArgs,
+} from './prompts/log-expenses.js';
+import {
+  validateCreateExpenseInput,
+  validateUpdateExpenseInput,
+  buildExpensePayload,
+  buildExpenseUpdatePayload,
+  readStagedAttachment,
+  SALES_TAX_STATUSES,
+  REBILL_TYPES,
+  RECURRING_FREQUENCIES,
+  type ResolvedExpenseRefs,
+} from './expenses.js';
+import { resolveCategory, resolveUser, resolveProject } from './resolvers.js';
+import {
+  validateCreateMileageExpenseInput,
+  findEngineOptionsForDate,
+  resolveEngine,
+  buildMileagePayload,
+  VEHICLE_TYPES,
+  type ResolvedEngine,
+} from './mileage.js';
+import type { MileageSettings } from './types.js';
 import {
   deriveImplicatedProjectUrls,
   findUnbilledTimeslipsForProjects,
@@ -23,11 +55,19 @@ import {
   type UnbilledByProject,
 } from './invoice-timeslip-check.js';
 
+export interface FreeAgentServerOptions {
+  /** Override evidence staging state. Default: setupStaging() runs and
+   *  creates a real session subdirectory. Tests pass an opt-out state
+   *  ({ ready: false, ... }) to avoid filesystem side effects. */
+  stagingState?: StagingState;
+}
+
 export class FreeAgentServer {
   private server: Server;
   private client: FreeAgentClient;
+  private stagingState: StagingState;
 
-  constructor(client?: FreeAgentClient) {
+  constructor(client?: FreeAgentClient, options?: FreeAgentServerOptions) {
     console.error('[Setup] Initializing FreeAgent MCP server...');
 
     if (client) {
@@ -50,6 +90,8 @@ export class FreeAgentServer {
       });
     }
 
+    this.stagingState = options?.stagingState ?? setupStaging();
+
     this.server = new Server(
       {
         name: 'freeagent-mcp',
@@ -58,14 +100,25 @@ export class FreeAgentServer {
       {
         capabilities: {
           tools: {},
+          prompts: {},
         },
       }
     );
 
     this.setupToolHandlers();
+    this.setupPromptHandlers();
 
     this.server.onerror = (error) => console.error('[MCP Error]', error);
-    installLifecycleHandlers({ server: this.server });
+
+    // Wrap server.close so cleanup runs as part of the existing shutdown
+    // path. Order: clean up staging dir first, then close the MCP server.
+    const closableWithStaging: Closable = {
+      close: async () => {
+        cleanupStaging(this.stagingState);
+        await this.server.close();
+      },
+    };
+    installLifecycleHandlers({ server: closableWithStaging });
   }
 
   private setupToolHandlers() {
@@ -581,6 +634,235 @@ export class FreeAgentServer {
             },
             required: ['timeslips']
           }
+        },
+        {
+          name: 'stage_evidence',
+          description:
+            'Stage a single evidence file in the session staging directory for later attachment ' +
+            'to an expense. Accepts base64 bytes (≤5 MB) and returns the on-disk path to pass into ' +
+            'create_expense, update_expense or create_mileage_expense. Use once per attachment ' +
+            'immediately before that call — bytes pass through model context only during this call. ' +
+            'Requires the shared evidence volume to be mounted; returns ' +
+            '{ ok: false, error: { code: "staging_volume_not_mounted" } } if not. ' +
+            'Returns a structured { ok: true | false, ... } result; never throws for business-logic errors.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              data: { type: 'string', description: 'Base64-encoded file bytes (≤5 MB decoded).' },
+              file_name: { type: 'string', description: 'Suggested filename. Server sanitises and prefixes with a random suffix to avoid collisions.' },
+              content_type: {
+                type: 'string',
+                description: 'MIME type. Must be one of: image/jpeg, image/png, image/gif, application/pdf. Magic bytes are verified against this claim.',
+                enum: [...ALLOWED_CONTENT_TYPES],
+              },
+            },
+            required: ['data', 'file_name', 'content_type'],
+          },
+        },
+        {
+          name: 'list_expenses',
+          description: 'List employee expenses, with optional filtering by date range, project, view, and claimant.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              view: {
+                type: 'string',
+                enum: ['recent', 'recurring'],
+                description: 'recent = recently dated expenses; recurring = recurring expense templates only.'
+              },
+              from_date: { type: 'string', description: 'Inclusive start date (YYYY-MM-DD)' },
+              to_date: { type: 'string', description: 'Inclusive end date (YYYY-MM-DD)' },
+              updated_since: { type: 'string', description: 'Only expenses updated after this ISO datetime' },
+              project: { type: 'string', description: 'Filter by project URL (rebillable expenses)' },
+              user: { type: 'string', description: 'Filter by claimant — a name, email, user URL, or "me". Applied client-side after fetching.' }
+            }
+          }
+        },
+        {
+          name: 'get_expense',
+          description: 'Get a single expense by ID, including read-only fields such as rebilled_on_invoice, capital_asset, and attachment metadata.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              id: { type: 'string', description: 'Expense ID' }
+            },
+            required: ['id']
+          }
+        },
+        {
+          name: 'create_expense',
+          description:
+            'Create an employee expense — money a team member spent that the company should account for. ' +
+            'Pass gross_value as a POSITIVE amount; by default it is treated as out-of-pocket spending owed ' +
+            'back to the claimant. Set refund_due: true only when the claimant owes money back to the company. ' +
+            'category may be a name, nominal code, or URL; the claimant defaults to the authenticated user. ' +
+            'For mileage claims use create_mileage_expense instead.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              category: { type: 'string', description: 'Expense category — a name (e.g. "Travel"), a nominal code, or a category URL. Resolved against list_categories.' },
+              dated_on: { type: 'string', description: 'Date the expense was incurred (YYYY-MM-DD)' },
+              gross_value: { type: 'number', description: 'Total amount including tax, as a POSITIVE number. Out-of-pocket by default — see refund_due.' },
+              refund_due: { type: 'boolean', description: 'Set true when this is money the claimant owes back to the company rather than money they paid out of pocket. Default false.' },
+              user: { type: 'string', description: 'Claimant — a name, email address, user URL, or "me". Defaults to the authenticated user.' },
+              description: { type: 'string', description: 'Free-text description of the expense' },
+              receipt_reference: { type: 'string', description: 'Receipt reference identifier' },
+              sales_tax_rate: { type: 'string', description: 'VAT rate as a percentage, e.g. "20.0"' },
+              sales_tax_value: { type: 'string', description: 'Exact VAT amount, as an alternative to sales_tax_rate' },
+              sales_tax_status: { type: 'string', enum: [...SALES_TAX_STATUSES], description: 'VAT treatment' },
+              ec_status: {
+                type: 'string',
+                enum: ['UK/Non-EC', 'EC Goods', 'EC Services', 'Reverse Charge'],
+                description: 'EC VAT status. EC Goods / EC Services are invalid for dates on or after 2021-01-01 in Great Britain.'
+              },
+              currency: { type: 'string', description: 'Currency code if the expense was in a foreign currency, e.g. "USD". FreeAgent auto-converts to your native currency.' },
+              native_gross_value: { type: 'number', description: 'Foreign-currency expense only: the amount in your native currency, as a POSITIVE number. Omit to let FreeAgent convert automatically.' },
+              manual_sales_tax_amount: { type: 'string', description: 'Foreign-currency expense only: the reclaimable tax amount in your native currency. Note: FreeAgent ignores sales_tax_rate on foreign-currency expenses.' },
+              project: { type: 'string', description: 'Project to associate the expense with — a project name, numeric ID, or URL. Required in order to rebill the cost.' },
+              rebill_type: { type: 'string', enum: [...REBILL_TYPES], description: 'How to rebill the expense to the project: cost (at cost), markup (cost plus rebill_factor%), or price (a fixed price). Requires project.' },
+              rebill_factor: { type: 'string', description: 'The markup percentage (rebill_type "markup") or fixed price (rebill_type "price"). Required for those rebill types.' },
+              recurring: { type: 'string', enum: [...RECURRING_FREQUENCIES], description: 'Make this a recurring expense at the given frequency.' },
+              recurring_end_date: { type: 'string', description: 'Date the recurrence stops (YYYY-MM-DD). Requires recurring.' },
+              property: { type: 'string', description: 'Property URL — required for UkUnincorporatedLandlord companies, ignored otherwise.' },
+              attachment: {
+                type: 'object',
+                description: 'Optional receipt. Stage the file first with stage_evidence, then pass the returned path here.',
+                properties: {
+                  evidence_path: { type: 'string', description: 'Path returned by stage_evidence' },
+                  file_name: { type: 'string', description: 'File name for the attachment' },
+                  content_type: { type: 'string', description: 'MIME type, e.g. image/jpeg, image/png, application/pdf' },
+                  description: { type: 'string', description: 'Optional attachment description' }
+                },
+                required: ['evidence_path', 'file_name', 'content_type']
+              }
+            },
+            required: ['category', 'dated_on', 'gross_value']
+          }
+        },
+        {
+          name: 'update_expense',
+          description:
+            'Update an existing expense. Only the fields you supply are changed. If you change gross_value, ' +
+            'pass it as a positive amount and set refund_due to match the intended direction.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              id: { type: 'string', description: 'Expense ID' },
+              category: { type: 'string', description: 'New category — name, nominal code, or URL' },
+              dated_on: { type: 'string', description: 'New date (YYYY-MM-DD)' },
+              gross_value: { type: 'number', description: 'New total amount, as a POSITIVE number. Out-of-pocket unless refund_due is set.' },
+              refund_due: { type: 'boolean', description: 'Direction for gross_value when it is being changed. Default false (out-of-pocket).' },
+              user: { type: 'string', description: 'New claimant — a name, email, user URL, or "me"' },
+              description: { type: 'string', description: 'New description' },
+              receipt_reference: { type: 'string', description: 'New receipt reference' },
+              sales_tax_rate: { type: 'string', description: 'New VAT rate, e.g. "20.0"' },
+              sales_tax_value: { type: 'string', description: 'New exact VAT amount' },
+              sales_tax_status: { type: 'string', enum: [...SALES_TAX_STATUSES], description: 'New VAT treatment' },
+              ec_status: {
+                type: 'string',
+                enum: ['UK/Non-EC', 'EC Goods', 'EC Services', 'Reverse Charge'],
+                description: 'New EC VAT status'
+              },
+              currency: { type: 'string', description: 'New currency code for a foreign-currency expense' },
+              native_gross_value: { type: 'number', description: 'New native-currency amount, as a POSITIVE number (foreign-currency expense)' },
+              manual_sales_tax_amount: { type: 'string', description: 'New reclaimable native-currency tax amount (foreign-currency expense)' },
+              project: { type: 'string', description: 'Project to associate the expense with — a project name, numeric ID, or URL' },
+              rebill_type: { type: 'string', enum: [...REBILL_TYPES], description: 'How to rebill the expense to the project' },
+              rebill_factor: { type: 'string', description: 'Markup percentage or fixed price for rebill_type markup/price' },
+              recurring: { type: 'string', enum: [...RECURRING_FREQUENCIES], description: 'Recurrence frequency' },
+              recurring_end_date: { type: 'string', description: 'Date the recurrence stops (YYYY-MM-DD)' },
+              property: { type: 'string', description: 'Property URL (UkUnincorporatedLandlord companies)' },
+              attachment: {
+                type: 'object',
+                description: 'Replacement receipt. Stage the file first with stage_evidence, then pass the returned path here.',
+                properties: {
+                  evidence_path: { type: 'string', description: 'Path returned by stage_evidence' },
+                  file_name: { type: 'string', description: 'File name for the attachment' },
+                  content_type: { type: 'string', description: 'MIME type, e.g. image/jpeg, image/png, application/pdf' },
+                  description: { type: 'string', description: 'Optional attachment description' }
+                },
+                required: ['evidence_path', 'file_name', 'content_type']
+              }
+            },
+            required: ['id']
+          }
+        },
+        {
+          name: 'delete_expense',
+          description: 'Delete an expense. If the expense has already been rebilled onto an invoice, you must pass confirm: true to acknowledge that deleting it leaves that invoice referencing a removed expense.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              id: { type: 'string', description: 'Expense ID' },
+              confirm: { type: 'boolean', description: 'Required when the expense has been rebilled onto an invoice.' }
+            },
+            required: ['id']
+          }
+        },
+        {
+          name: 'get_mileage_settings',
+          description:
+            'Get the FreeAgent mileage settings — the valid engine types, engine sizes, and ' +
+            'mileage rates, scoped by date period. Use this to discover valid engine_type and ' +
+            'engine_size values before calling create_mileage_expense.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {}
+          }
+        },
+        {
+          name: 'create_mileage_expense',
+          description:
+            'Log a mileage claim — reimbursement for business travel in a personal vehicle. ' +
+            'engine_type and engine_size are validated against the official mileage settings ' +
+            'for the claim date (call get_mileage_settings to see the valid options); engine_type ' +
+            'defaults to Petrol for cars and motorcycles. Bicycles need no engine fields.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              dated_on: { type: 'string', description: 'Date of travel (YYYY-MM-DD)' },
+              mileage: { type: 'number', description: 'Miles travelled, as a positive number' },
+              vehicle_type: { type: 'string', enum: [...VEHICLE_TYPES], description: 'Vehicle used for the journey' },
+              engine_type: { type: 'string', description: 'Engine type for a Car/Motorcycle, e.g. "Petrol", "Diesel", "Electric". Defaults to Petrol. Validated against get_mileage_settings.' },
+              engine_size: { type: 'string', description: 'Engine size band for a Car/Motorcycle, e.g. "Up to 1400cc". Validated against get_mileage_settings.' },
+              reclaim_mileage: { type: 'boolean', description: 'Whether to reclaim at the HMRC AMAP rate. Default true.' },
+              user: { type: 'string', description: 'Claimant — a name, email address, user URL, or "me". Defaults to the authenticated user.' },
+              description: { type: 'string', description: 'Free-text description of the journey' },
+              receipt_reference: { type: 'string', description: 'Receipt reference identifier' },
+              have_vat_receipt: { type: 'boolean', description: 'Whether a VAT receipt is held for the fuel' },
+              attachment: {
+                type: 'object',
+                description: 'Optional supporting document. Stage the file first with stage_evidence, then pass the returned path here.',
+                properties: {
+                  evidence_path: { type: 'string', description: 'Path returned by stage_evidence' },
+                  file_name: { type: 'string', description: 'File name for the attachment' },
+                  content_type: { type: 'string', description: 'MIME type, e.g. image/jpeg, image/png, application/pdf' },
+                  description: { type: 'string', description: 'Optional attachment description' }
+                },
+                required: ['evidence_path', 'file_name', 'content_type']
+              }
+            },
+            required: ['dated_on', 'mileage', 'vehicle_type']
+          }
+        },
+        {
+          name: 'create_expenses',
+          description:
+            'Batch-create multiple expenses in a single call. FreeAgent processes the batch ' +
+            'atomically — if one item is invalid the whole batch is rejected. Each item takes ' +
+            'the same fields as create_expense. Categories, claimants and projects are resolved ' +
+            'once per distinct value across the batch.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              expenses: {
+                type: 'array',
+                description: 'Up to 100 expense objects, each shaped like the create_expense arguments (category, dated_on, gross_value, refund_due, user, and the optional fields).',
+                items: { type: 'object' }
+              }
+            },
+            required: ['expenses']
+          }
         }
       ],
     }));
@@ -986,6 +1268,209 @@ export class FreeAgentServer {
             };
           }
 
+          case 'stage_evidence': {
+            const args = request.params.arguments as {
+              data?: unknown;
+              file_name?: unknown;
+              content_type?: unknown;
+            };
+            // Light schema-guard. The MCP SDK validates required+type, but
+            // a defensive cast here avoids passing garbage to the pure
+            // staging function and producing a less actionable error.
+            if (typeof args?.data !== 'string' || typeof args?.file_name !== 'string' || typeof args?.content_type !== 'string') {
+              const body = { ok: false as const, error: { code: 'invalid_arguments', message: 'data, file_name, content_type are required strings' } };
+              return { content: [{ type: 'text' as const, text: JSON.stringify(body, null, 2) }] };
+            }
+            const outcome = stageEvidence(
+              { data: args.data, file_name: args.file_name, content_type: args.content_type },
+              { sessionPath: this.stagingState.sessionPath },
+            );
+            const body = outcome.ok
+              ? { ok: true as const, ...outcome.result }
+              : { ok: false as const, error: outcome.error };
+            return { content: [{ type: 'text' as const, text: JSON.stringify(body, null, 2) }] };
+          }
+
+          case 'list_expenses': {
+            const args = (request.params.arguments ?? {}) as {
+              view?: 'recent' | 'recurring';
+              from_date?: string;
+              to_date?: string;
+              updated_since?: string;
+              project?: string;
+              user?: string;
+            };
+            const { user: userFilter, ...listParams } = args;
+            let expenses = await this.client.listExpenses(listParams);
+            // The FreeAgent /expenses endpoint has no claimant filter, so
+            // apply it client-side after the (paginated) fetch.
+            if (typeof userFilter === 'string' && userFilter.trim() !== '') {
+              const userUrl = await resolveUser(this.client, userFilter);
+              expenses = expenses.filter(e => e.user === userUrl);
+            }
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(expenses, null, 2) }]
+            };
+          }
+
+          case 'get_expense': {
+            const { id: rawId } = request.params.arguments as { id: string };
+            const id = validateId(rawId);
+            const expense = await this.client.getExpense(id);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(expense, null, 2) }]
+            };
+          }
+
+          case 'create_expense': {
+            const input = validateCreateExpenseInput(request.params.arguments);
+            const [userUrl, categoryUrl, projectUrl] = await Promise.all([
+              resolveUser(this.client, input.user),
+              resolveCategory(this.client, input.category),
+              input.project ? resolveProject(this.client, input.project) : Promise.resolve(undefined),
+            ]);
+            const refs: ResolvedExpenseRefs = { user: userUrl, category: categoryUrl };
+            if (projectUrl) refs.project = projectUrl;
+            if (input.attachment) {
+              refs.attachment = readStagedAttachment(input.attachment, this.stagingState.sessionPath);
+            }
+            const expense = await this.client.createExpense(buildExpensePayload(input, refs));
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(expense, null, 2) }]
+            };
+          }
+
+          case 'update_expense': {
+            const { id: rawId } = request.params.arguments as { id: string };
+            const id = validateId(rawId);
+            const input = validateUpdateExpenseInput(request.params.arguments);
+            const refs: ResolvedExpenseRefs = {};
+            if (input.user) refs.user = await resolveUser(this.client, input.user);
+            if (input.category) refs.category = await resolveCategory(this.client, input.category);
+            if (input.project) refs.project = await resolveProject(this.client, input.project);
+            if (input.attachment) {
+              refs.attachment = readStagedAttachment(input.attachment, this.stagingState.sessionPath);
+            }
+            const payload = buildExpenseUpdatePayload(input, refs);
+            if (Object.keys(payload).length === 0) {
+              return {
+                content: [{ type: 'text' as const, text: 'No update fields supplied — nothing to change.' }],
+                isError: true,
+              };
+            }
+            const expense = await this.client.updateExpense(id, payload);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(expense, null, 2) }]
+            };
+          }
+
+          case 'delete_expense': {
+            const { id: rawId, confirm } = request.params.arguments as { id: string; confirm?: boolean };
+            const id = validateId(rawId);
+            const expense = await this.client.getExpense(id);
+            if (expense.rebilled_on_invoice && confirm !== true) {
+              return {
+                content: [{ type: 'text' as const, text: `Expense ${id} has already been rebilled onto invoice ${expense.rebilled_on_invoice}. Deleting it leaves that invoice referencing a removed expense. To proceed, retry with confirm: true.` }],
+                isError: true,
+              };
+            }
+            await this.client.deleteExpense(id);
+            return {
+              content: [{ type: 'text' as const, text: `Expense ${id} deleted successfully` }]
+            };
+          }
+
+          case 'get_mileage_settings': {
+            const settings = await this.client.getMileageSettings();
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(settings, null, 2) }]
+            };
+          }
+
+          case 'create_mileage_expense': {
+            const input = validateCreateMileageExpenseInput(request.params.arguments);
+            const userUrl = await resolveUser(this.client, input.user);
+
+            // Validate engine type/size against the dated mileage settings.
+            // Bicycles carry no engine fields. If the settings can't be
+            // fetched, resolveEngine degrades to passing values through.
+            let engine: ResolvedEngine = {};
+            if (input.vehicle_type !== 'Bicycle') {
+              let settings: MileageSettings | null = null;
+              try {
+                settings = await this.client.getMileageSettings();
+              } catch (e: any) {
+                console.error('[expenses] mileage_settings unavailable, skipping engine validation:', e.message);
+              }
+              const options = settings ? findEngineOptionsForDate(settings, input.dated_on) : null;
+              engine = resolveEngine(options, input);
+            }
+
+            let attachment;
+            if (input.attachment) {
+              attachment = readStagedAttachment(input.attachment, this.stagingState.sessionPath);
+            }
+            const payload = buildMileagePayload(input, { user: userUrl, engine, attachment });
+            const expense = await this.client.createExpense(payload);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(expense, null, 2) }]
+            };
+          }
+
+          case 'create_expenses': {
+            const args = request.params.arguments as { expenses?: unknown };
+            if (!Array.isArray(args.expenses) || args.expenses.length === 0) {
+              return {
+                content: [{ type: 'text' as const, text: 'expenses must be a non-empty array' }],
+                isError: true,
+              };
+            }
+            if (args.expenses.length > 100) {
+              return {
+                content: [{ type: 'text' as const, text: `Batch too large: ${args.expenses.length} > 100. Split into smaller calls.` }],
+                isError: true,
+              };
+            }
+            const inputs = args.expenses.map((item, i) => {
+              try {
+                return validateCreateExpenseInput(item);
+              } catch (e: any) {
+                throw new Error(`expenses[${i}]: ${e.message}`);
+              }
+            });
+            // Memoise resolution so a batch that shares categories,
+            // claimants or projects does not re-fetch the same lookup
+            // once per item.
+            const cache = new Map<string, Promise<string>>();
+            const memo = (key: string, fn: () => Promise<string>) => {
+              if (!cache.has(key)) cache.set(key, fn());
+              return cache.get(key)!;
+            };
+            const payloads = await Promise.all(inputs.map(async (input, i) => {
+              try {
+                const [userUrl, categoryUrl, projectUrl] = await Promise.all([
+                  memo(`u:${input.user ?? ''}`, () => resolveUser(this.client, input.user)),
+                  memo(`c:${input.category}`, () => resolveCategory(this.client, input.category)),
+                  input.project
+                    ? memo(`p:${input.project}`, () => resolveProject(this.client, input.project!))
+                    : Promise.resolve(undefined),
+                ]);
+                const refs: ResolvedExpenseRefs = { user: userUrl, category: categoryUrl };
+                if (projectUrl) refs.project = projectUrl;
+                if (input.attachment) {
+                  refs.attachment = readStagedAttachment(input.attachment, this.stagingState.sessionPath);
+                }
+                return buildExpensePayload(input, refs);
+              } catch (e: any) {
+                throw new Error(`expenses[${i}]: ${e.message}`);
+              }
+            }));
+            const created = await this.client.createExpenses(payloads);
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(created, null, 2) }]
+            };
+          }
+
           default:
             throw new McpError(
               ErrorCode.MethodNotFound,
@@ -999,6 +1484,31 @@ export class FreeAgentServer {
           isError: true
         };
       }
+    });
+  }
+
+  private setupPromptHandlers() {
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+      prompts: [
+        {
+          name: LOG_EXPENSES_PROMPT_NAME,
+          description: LOG_EXPENSES_PROMPT_DESCRIPTION,
+          arguments: LOG_EXPENSES_PROMPT_ARGUMENTS,
+        },
+      ],
+    }));
+
+    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      if (request.params.name === LOG_EXPENSES_PROMPT_NAME) {
+        const args = (request.params.arguments ?? {}) as LogExpensesPromptArgs;
+        return {
+          description: LOG_EXPENSES_PROMPT_DESCRIPTION,
+          messages: [
+            { role: 'user', content: { type: 'text', text: buildLogExpensesPromptBody(this.stagingState, args) } },
+          ],
+        };
+      }
+      throw new McpError(ErrorCode.MethodNotFound, `Unknown prompt: ${request.params.name}`);
     });
   }
 

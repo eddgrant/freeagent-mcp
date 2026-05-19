@@ -37,6 +37,23 @@ Forked from [markpitt/freeagent-mcp](https://github.com/markpitt/freeagent-mcp).
 - "Show me the categorised breakdown of outgoings for my current account"
 - "What are my FreeAgent nominal categories?"
 
+### Expenses
+Manage employee expenses — money a team member spent that the company should account for. Type `/mcp__freeagent__log-expenses` in Claude Code for a guided receipts → categorise → review → create flow with an explicit approval gate. Or just ask:
+
+- "Log a £42 train fare to Travel on my account, dated yesterday."
+- "Add a £12.50 lunch expense for Jane Smith, category Subsistence."
+- "Show me all of my expenses for April."
+- "Change the category on expense 305 to Travel."
+- "Log a 47-mile mileage claim in my diesel car for Tuesday's client visit."
+
+Amounts are entered as a **positive** number; out-of-pocket spending — money owed back to the claimant — is the default. Set `refund_due` when the claimant owes money back to the company instead. Categories and claimants can be given by name ("Travel", "Jane Smith") and are resolved automatically; the claimant defaults to you.
+
+Mileage claims use `create_mileage_expense`: give the miles, vehicle type, and — for cars and motorcycles — the engine. Engine type and size are checked against the official mileage settings for the claim date, so a wrong value comes back with the valid options listed; `engine_type` defaults to Petrol.
+
+`create_expense` and `update_expense` also handle the advanced modes: **rebillable** expenses (associate with a `project`, optionally `rebill_type` cost/markup/price), **recurring** expenses (a `recurring` frequency), and **foreign-currency** expenses (`currency` plus an optional native-currency amount). `create_expenses` posts a whole batch in one call.
+
+Receipts attach via an opt-in staging volume (see [Optional: enable receipt attachments](#optional-enable-receipt-attachments)): stage the file with `stage_evidence`, then pass the returned path to `create_expense`.
+
 ### Projects & Tasks
 - "Set up a new project for Client Foo with a day rate of £123"
 - "Create a billable task called 'Consultancy' on the Foo project"
@@ -111,6 +128,92 @@ docker build -t freeagent-mcp .
 
 Then replace `eddgrant/freeagent-mcp` with `freeagent-mcp` in the MCP settings above.
 
+### Optional: enable receipt attachments
+
+Attaching evidence files (PDF/JPEG/PNG receipts) to expenses needs a shared filesystem volume between your host and the Docker container. The volume is the channel through which the agent hands bytes to the FreeAgent MCP without round-tripping them through the model's context window.
+
+Skip this if you don't need to attach receipts — expenses without attachments work without the volume.
+
+**One-time setup:**
+
+```bash
+# Create the staging directory on the host. IMPORTANT: do this BEFORE
+# the first container run. If the directory doesn't exist when Docker
+# mounts it, Docker creates it as root and the container (running as
+# your user) won't be able to write to it.
+mkdir -p /tmp/freeagent-mcp
+```
+
+If you've already hit that ownership trap, fix it once with:
+
+```bash
+sudo chown -R "$USER" /tmp/freeagent-mcp
+```
+
+**MCP config additions** — three extra args to your `docker run` invocation:
+
+```jsonc
+{
+  "mcpServers": {
+    "freeagent": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--user", "1000:1000",                                  // run as your host UID:GID
+        "-v", "/tmp/freeagent-mcp:/tmp/freeagent-mcp",          // shared staging dir
+        "-e", "FREEAGENT_EVIDENCE_BASE",                        // tells the server where it lives
+        "-e", "FREEAGENT_CLIENT_ID",
+        "-e", "FREEAGENT_CLIENT_SECRET",
+        "-e", "FREEAGENT_ACCESS_TOKEN",
+        "-e", "FREEAGENT_REFRESH_TOKEN",
+        "eddgrant/freeagent-mcp"
+      ],
+      "env": {
+        "FREEAGENT_EVIDENCE_BASE": "/tmp/freeagent-mcp",
+        "FREEAGENT_CLIENT_ID": "...",
+        "FREEAGENT_CLIENT_SECRET": "...",
+        "FREEAGENT_ACCESS_TOKEN": "...",
+        "FREEAGENT_REFRESH_TOKEN": "..."
+      }
+    }
+  }
+}
+```
+
+Replace `1000:1000` with the output of `id -u`:`id -g` on your host. The path can be anything writable by your user — `/tmp/freeagent-mcp`, `~/.cache/freeagent-mcp`, etc. — but it must be the same on both sides of the `-v` mount.
+
+A per-session subdirectory is created inside `FREEAGENT_EVIDENCE_BASE` at startup and removed on shutdown; stale subdirectories from previous runs are auto-reaped after 24 hours, so you never need to clean up manually.
+
+**How to tell it's working:** call `stage_evidence` with a small test file. A `{ "ok": true, "evidence_path": "..." }` response means the volume is mounted; `{ "ok": false, "error": { "code": "staging_volume_not_mounted" } }` means it isn't (expenses without attachments still work).
+
+### Testing a pre-release image interactively
+
+When a PR builds an image (e.g. `eddgrant/freeagent-mcp:pr-42`) and you want to actually use it from a Claude Code session — without polluting your normal `~/.claude/settings.json` and without losing your stable MCP setup — use:
+
+```bash
+./scripts/test-image.sh pr-42
+```
+
+This creates a self-contained temp directory with:
+- a project-scoped `.mcp.json` pointing at the image, server-named `freeagent_test` so it doesn't collide with your real `freeagent` server
+- a pre-created `evidence/` staging directory mounted into the container at the same path on both sides
+- a `CLAUDE.md` that Claude Code auto-loads, containing a smoke-test checklist
+
+The script prints `cd <temp-dir> && claude` for you to run. Credentials pass through from your shell via bare `-e VAR` flags — nothing is written to disk. When you're done, `rm -rf` the temp dir.
+
+```bash
+./scripts/test-image.sh                       # latest from Docker Hub
+./scripts/test-image.sh sha-abc1234           # specific commit
+./scripts/test-image.sh --image fa-dev        # local image (skips Docker Hub prefix)
+./scripts/test-image.sh pr-42 --no-staging    # test the unmounted-volume code path
+```
+
+The log-expenses prompt is invoked via `/mcp__freeagent_test__log-expenses` in that session.
+
+Required env vars in your shell: `FREEAGENT_CLIENT_ID`, `FREEAGENT_CLIENT_SECRET`, `FREEAGENT_ACCESS_TOKEN`, `FREEAGENT_REFRESH_TOKEN`.
+
 ## Tools Reference
 
 | Tool                                 | Description                                                                           |
@@ -143,6 +246,21 @@ Then replace `eddgrant/freeagent-mcp` with `freeagent-mcp` in the MCP settings a
 | `list_tasks`                         | List tasks, optionally filtered by project                                            |
 | `list_users`                         | List users in the organisation                                                        |
 | `get_current_user`                   | Get the currently authenticated user                                                  |
+| `stage_evidence`                     | Stage a base64 receipt file in the session staging dir for later attachment            |
+| `list_expenses`                      | List expenses with optional date, project, view, and claimant filters                  |
+| `get_expense`                        | Get a single expense by ID                                                             |
+| `create_expense`                     | Create an employee expense (category/claimant by name, receipts via staging)            |
+| `update_expense`                     | Update an existing expense                                                              |
+| `delete_expense`                     | Delete an expense (requires confirmation if rebilled onto an invoice)                   |
+| `get_mileage_settings`               | Get valid engine types, sizes, and mileage rates by date period                         |
+| `create_mileage_expense`             | Log a mileage claim (engine validated against the dated mileage settings)               |
+| `create_expenses`                    | Batch-create multiple expenses in a single call                                         |
+
+## Prompts
+
+| Prompt                          | Description                                                                       |
+|---------------------------------|-----------------------------------------------------------------------------------|
+| `/mcp__freeagent__log-expenses` | Guided expense entry: gather receipts → categorise → review → create with a gate  |
 
 ## Development
 

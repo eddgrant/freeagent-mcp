@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectAttributes, ProjectsResponse, ProjectResponse, Task, TaskAttributes, TasksResponse, TaskResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse, InvoicePdfResponse, Category, CategoriesResponse, BankAccount, BankAccountsResponse, BankTransaction, BankTransactionsResponse, BankTransactionExplanation, BankTransactionExplanationsResponse, Bill, BillsResponse, BillResponse, ProfitAndLossSummary, ProfitAndLossSummaryResponse } from './types.js';
+import { FreeAgentConfig, Timeslip, TimeslipAttributes, TimeslipsResponse, TimeslipResponse, Project, ProjectAttributes, ProjectsResponse, ProjectResponse, Task, TaskAttributes, TasksResponse, TaskResponse, User, UsersResponse, UserResponse, Invoice, InvoiceAttributes, InvoiceResponse, InvoicesResponse, InvoicePdfResponse, Category, CategoriesResponse, BankAccount, BankAccountResponse, BankAccountsResponse, BankTransaction, BankTransactionResponse, BankTransactionsResponse, BankTransactionExplanation, BankTransactionExplanationCreatePayload, BankTransactionExplanationResponse, BankTransactionExplanationsResponse, Bill, BillsResponse, BillResponse, ProfitAndLossSummary, ProfitAndLossSummaryResponse, Expense, ExpenseResponse, ExpensesResponse, ExpenseCreatePayload, MileageSettings, MileageSettingsResponse } from './types.js';
 import { mapWithConcurrency, parseLastPage, parseRetryAfter, readPaginationConcurrency } from './pagination.js';
 
 export class FreeAgentClient {
@@ -436,6 +436,17 @@ export class FreeAgentClient {
         }
     }
 
+    async getBankAccount(id: string): Promise<BankAccount> {
+        try {
+            console.error('[API] Fetching bank account:', id);
+            const response = await this.axiosInstance.get<BankAccountResponse>(`/bank_accounts/${id}`);
+            return response.data.bank_account;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch bank account:', error.message);
+            throw error;
+        }
+    }
+
     async listBankTransactions(params: {
         bank_account: string;
         from_date?: string;
@@ -452,6 +463,17 @@ export class FreeAgentClient {
         }
     }
 
+    async getBankTransaction(id: string): Promise<BankTransaction> {
+        try {
+            console.error('[API] Fetching bank transaction:', id);
+            const response = await this.axiosInstance.get<BankTransactionResponse>(`/bank_transactions/${id}`);
+            return response.data.bank_transaction;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch bank transaction:', error.message);
+            throw error;
+        }
+    }
+
     async listBankTransactionExplanations(params: {
         bank_account: string;
         from_date?: string;
@@ -463,6 +485,29 @@ export class FreeAgentClient {
             return await this.paginatedGet<BankTransactionExplanation>('/bank_transaction_explanations', 'bank_transaction_explanations', params);
         } catch (error: any) {
             console.error('[API] Failed to fetch bank transaction explanations:', error.message);
+            throw error;
+        }
+    }
+
+    async createBankTransactionExplanation(
+        payload: BankTransactionExplanationCreatePayload,
+    ): Promise<BankTransactionExplanation> {
+        try {
+            // Avoid logging the attachment payload — it could be a 5 MB
+            // base64 blob and would drown the rest of the log.
+            const { attachment, ...loggable } = payload;
+            const attachmentSummary = attachment
+                ? { file_name: attachment.file_name, content_type: attachment.content_type, bytes: attachment.data.length }
+                : undefined;
+            console.error('[API] Creating bank transaction explanation:', { ...loggable, attachment: attachmentSummary });
+
+            const response = await this.axiosInstance.post<BankTransactionExplanationResponse>(
+                '/bank_transaction_explanations',
+                { bank_transaction_explanation: payload },
+            );
+            return response.data.bank_transaction_explanation;
+        } catch (error: any) {
+            console.error('[API] Failed to create bank transaction explanation:', error.message);
             throw error;
         }
     }
@@ -496,6 +541,87 @@ export class FreeAgentClient {
         }
     }
 
+    async listExpenses(params?: {
+        view?: 'recent' | 'recurring';
+        from_date?: string;
+        to_date?: string;
+        updated_since?: string;
+        project?: string;
+    }): Promise<Expense[]> {
+        try {
+            console.error('[API] Fetching expenses with params:', params);
+            return await this.paginatedGet<Expense>('/expenses', 'expenses', params ?? {});
+        } catch (error: any) {
+            console.error('[API] Failed to fetch expenses:', error.message);
+            throw error;
+        }
+    }
+
+    async getExpense(id: string): Promise<Expense> {
+        try {
+            console.error('[API] Fetching expense:', id);
+            const response = await this.axiosInstance.get<ExpenseResponse>(`/expenses/${id}`);
+            return response.data.expense;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch expense:', error.message);
+            throw error;
+        }
+    }
+
+    async createExpense(expense: ExpenseCreatePayload): Promise<Expense> {
+        try {
+            console.error('[API] Creating expense:', summariseExpenseForLog(expense));
+            const response = await this.axiosInstance.post<ExpenseResponse>('/expenses', { expense });
+            return response.data.expense;
+        } catch (error: any) {
+            console.error('[API] Failed to create expense:', error.message);
+            throw error;
+        }
+    }
+
+    async createExpenses(expenses: ExpenseCreatePayload[]): Promise<Expense[]> {
+        try {
+            console.error('[API] Creating expenses:', expenses.map(summariseExpenseForLog));
+            const response = await this.axiosInstance.post<ExpensesResponse>('/expenses', { expenses });
+            return response.data.expenses;
+        } catch (error: any) {
+            console.error('[API] Failed to create expenses:', error.message);
+            throw error;
+        }
+    }
+
+    async updateExpense(id: string, expense: Partial<ExpenseCreatePayload>): Promise<Expense> {
+        try {
+            console.error('[API] Updating expense:', id, summariseExpenseForLog(expense));
+            const response = await this.axiosInstance.put<ExpenseResponse>(`/expenses/${id}`, { expense });
+            return response.data.expense;
+        } catch (error: any) {
+            console.error('[API] Failed to update expense:', error.message);
+            throw error;
+        }
+    }
+
+    async deleteExpense(id: string): Promise<void> {
+        try {
+            console.error('[API] Deleting expense:', id);
+            await this.axiosInstance.delete(`/expenses/${id}`);
+        } catch (error: any) {
+            console.error('[API] Failed to delete expense:', error.message);
+            throw error;
+        }
+    }
+
+    async getMileageSettings(): Promise<MileageSettings> {
+        try {
+            console.error('[API] Fetching mileage settings');
+            const response = await this.axiosInstance.get<MileageSettingsResponse>('/expenses/mileage_settings');
+            return response.data.mileage_settings;
+        } catch (error: any) {
+            console.error('[API] Failed to fetch mileage settings:', error.message);
+            throw error;
+        }
+    }
+
     async getProfitAndLossSummary(params?: {
         from_date?: string;
         to_date?: string;
@@ -525,4 +651,19 @@ export class FreeAgentClient {
             throw error;
         }
     }
+}
+
+// Drop the base64 attachment blob from an expense payload before logging
+// — it can be several megabytes and would drown the rest of the log.
+function summariseExpenseForLog(expense: Partial<ExpenseCreatePayload>): Record<string, unknown> {
+    const { attachment, ...rest } = expense;
+    if (!attachment) return { ...rest };
+    return {
+        ...rest,
+        attachment: {
+            file_name: attachment.file_name,
+            content_type: attachment.content_type,
+            bytes: attachment.data.length,
+        },
+    };
 }

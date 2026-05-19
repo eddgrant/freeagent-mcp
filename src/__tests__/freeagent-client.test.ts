@@ -521,6 +521,80 @@ describe('markInvoiceAsSent', () => {
   });
 });
 
+describe('getBankAccount', () => {
+  it('calls GET /bank_accounts/:id and unwraps response', async () => {
+    const bank_account = { url: 'https://api.freeagent.com/v2/bank_accounts/9', currency: 'GBP' };
+    mockGet.mockResolvedValue({ data: { bank_account } });
+
+    const result = await client.getBankAccount('9');
+
+    expect(mockGet).toHaveBeenCalledWith('/bank_accounts/9');
+    expect(result).toEqual(bank_account);
+  });
+});
+
+describe('getBankTransaction', () => {
+  it('calls GET /bank_transactions/:id and unwraps response', async () => {
+    const bank_transaction = { url: 'https://api.freeagent.com/v2/bank_transactions/123', amount: '-42.10' };
+    mockGet.mockResolvedValue({ data: { bank_transaction } });
+
+    const result = await client.getBankTransaction('123');
+
+    expect(mockGet).toHaveBeenCalledWith('/bank_transactions/123');
+    expect(result).toEqual(bank_transaction);
+  });
+});
+
+describe('createBankTransactionExplanation', () => {
+  it('calls POST /bank_transaction_explanations with wrapped body', async () => {
+    const payload = {
+      bank_transaction: 'https://api.freeagent.com/v2/bank_transactions/123',
+      dated_on: '2026-04-12',
+      gross_value: '-42.10',
+      category: 'https://api.freeagent.com/v2/categories/285',
+    };
+    const created = { url: 'https://api.freeagent.com/v2/bank_transaction_explanations/777', ...payload };
+    mockPost.mockResolvedValue({ data: { bank_transaction_explanation: created } });
+
+    const result = await client.createBankTransactionExplanation(payload);
+
+    expect(mockPost).toHaveBeenCalledWith(
+      '/bank_transaction_explanations',
+      { bank_transaction_explanation: payload },
+    );
+    expect(result).toEqual(created);
+  });
+
+  it('forwards an attachment payload verbatim', async () => {
+    const payload = {
+      bank_transaction: 'https://api.freeagent.com/v2/bank_transactions/123',
+      dated_on: '2026-04-12',
+      gross_value: '-42.10',
+      category: 'https://api.freeagent.com/v2/categories/285',
+      attachment: {
+        data: 'aGVsbG8=',
+        file_name: 'receipt.pdf',
+        content_type: 'application/pdf',
+      },
+    };
+    mockPost.mockResolvedValue({ data: { bank_transaction_explanation: { url: 'x', ...payload } } });
+
+    await client.createBankTransactionExplanation(payload);
+
+    expect(mockPost).toHaveBeenCalledWith(
+      '/bank_transaction_explanations',
+      { bank_transaction_explanation: payload },
+    );
+  });
+
+  it('re-throws on API error', async () => {
+    mockPost.mockRejectedValue(new Error('422 unprocessable'));
+    await expect(client.createBankTransactionExplanation({
+      bank_transaction: 'x', dated_on: '2026-04-12', gross_value: '0',
+    })).rejects.toThrow('422 unprocessable');
+  });
+});
+
 describe('token refresh interceptor', () => {
   it('registers a response interceptor', () => {
     expect(mockInterceptors.response.use).toHaveBeenCalledWith(
@@ -664,5 +738,73 @@ describe('429 retry interceptor', () => {
     expect(delays).toContain(40);
 
     setTimeoutSpy.mockRestore();
+  });
+});
+
+describe('expenses', () => {
+  const payload = {
+    user: 'https://api.freeagent.com/v2/users/1',
+    category: 'https://api.freeagent.com/v2/categories/285',
+    dated_on: '2026-05-01',
+    gross_value: '-42.0',
+  };
+
+  it('listExpenses calls GET /expenses with caller params plus pagination and unwraps', async () => {
+    const expenses = [{ url: 'https://api.freeagent.com/v2/expenses/1' }];
+    mockGet.mockResolvedValue({ data: { expenses } });
+
+    const result = await client.listExpenses({ view: 'recent', from_date: '2026-05-01' });
+
+    expect(mockGet).toHaveBeenCalledWith('/expenses', {
+      params: { view: 'recent', from_date: '2026-05-01', page: 1, per_page: 100 },
+    });
+    expect(result).toEqual(expenses);
+  });
+
+  it('getExpense calls GET /expenses/:id and unwraps', async () => {
+    mockGet.mockResolvedValue({ data: { expense: { url: 'e/5' } } });
+    const result = await client.getExpense('5');
+    expect(mockGet).toHaveBeenCalledWith('/expenses/5');
+    expect(result).toEqual({ url: 'e/5' });
+  });
+
+  it('createExpense POSTs the expense wrapper and unwraps', async () => {
+    mockPost.mockResolvedValue({ data: { expense: { url: 'e/9' } } });
+    const result = await client.createExpense(payload);
+    expect(mockPost).toHaveBeenCalledWith('/expenses', { expense: payload });
+    expect(result).toEqual({ url: 'e/9' });
+  });
+
+  it('createExpenses POSTs the expenses array wrapper and unwraps', async () => {
+    mockPost.mockResolvedValue({ data: { expenses: [{ url: 'e/9' }, { url: 'e/10' }] } });
+    const result = await client.createExpenses([payload, payload]);
+    expect(mockPost).toHaveBeenCalledWith('/expenses', { expenses: [payload, payload] });
+    expect(result).toHaveLength(2);
+  });
+
+  it('updateExpense PUTs /expenses/:id with the expense wrapper', async () => {
+    mockPut.mockResolvedValue({ data: { expense: { url: 'e/5' } } });
+    const result = await client.updateExpense('5', { description: 'Updated' });
+    expect(mockPut).toHaveBeenCalledWith('/expenses/5', { expense: { description: 'Updated' } });
+    expect(result).toEqual({ url: 'e/5' });
+  });
+
+  it('deleteExpense calls DELETE /expenses/:id', async () => {
+    mockDelete.mockResolvedValue({});
+    await client.deleteExpense('5');
+    expect(mockDelete).toHaveBeenCalledWith('/expenses/5');
+  });
+
+  it('getMileageSettings calls GET /expenses/mileage_settings and unwraps', async () => {
+    const mileage_settings = { engine_type_and_size_options: [], mileage_rates: [] };
+    mockGet.mockResolvedValue({ data: { mileage_settings } });
+    const result = await client.getMileageSettings();
+    expect(mockGet).toHaveBeenCalledWith('/expenses/mileage_settings');
+    expect(result).toEqual(mileage_settings);
+  });
+
+  it('re-throws on API error', async () => {
+    mockGet.mockRejectedValue(new Error('Network error'));
+    await expect(client.getExpense('5')).rejects.toThrow('Network error');
   });
 });
