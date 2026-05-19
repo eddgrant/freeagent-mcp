@@ -230,6 +230,10 @@ export interface BankAccountsResponse {
     bank_accounts: BankAccount[];
 }
 
+export interface BankAccountResponse {
+    bank_account: BankAccount;
+}
+
 export interface BankTransaction {
     url: string;
     amount: string;
@@ -239,12 +243,21 @@ export interface BankTransaction {
     full_description?: string;
     unexplained_amount: string;
     is_manual: boolean;
+    transaction_id?: string;
+    matching_transactions_count?: number;
+    /** Nested when fetched via /bank_transactions with view=all or view=
+     *  explained. Empty for unexplained transactions. */
+    bank_transaction_explanations?: BankTransactionExplanation[];
     created_at: string;
     updated_at: string;
 }
 
 export interface BankTransactionsResponse {
     bank_transactions: BankTransaction[];
+}
+
+export interface BankTransactionResponse {
+    bank_transaction: BankTransaction;
 }
 
 export interface BankTransactionExplanation {
@@ -366,4 +379,170 @@ export interface FreeAgentConfig {
     clientSecret: string;
     accessToken: string;
     refreshToken: string;
+}
+
+// FreeAgent API shapes for POST /bank_transaction_explanations.
+export interface BankTransactionExplanationCreatePayload {
+    bank_transaction: string;
+    dated_on: string;
+    gross_value: string;
+    description?: string;
+    category?: string;
+    paid_bill?: string;
+    paid_invoice?: string;
+    sales_tax_status?: string;
+    sales_tax_rate?: string;
+    sales_tax_value?: string;
+    project?: string;
+    marked_for_review?: boolean;
+    attachment?: {
+        data: string;        // base64-encoded bytes
+        file_name: string;
+        content_type: string;
+        description?: string;
+    };
+}
+
+export interface BankTransactionExplanationResponse {
+    bank_transaction_explanation: BankTransactionExplanation;
+}
+
+// =============================================================================
+// Employee expenses v1
+// FreeAgent's expense resource is a single endpoint that shape-shifts by
+// "mode": money expenses, mileage claims, rebillable, recurring, and
+// foreign-currency expenses. See the expenses feature design notes for scope.
+// =============================================================================
+
+/** Attachment metadata as it appears on a fetched expense (read-only). */
+export interface ExpenseAttachment {
+    url: string;
+    content_src: string;
+    content_type: string;
+    file_name: string;
+    file_size: number;
+}
+
+/** A FreeAgent expense as returned by the API. Most fields are optional:
+ *  the resource shape varies by expense mode (e.g. mileage claims carry
+ *  `mileage`/`vehicle_type` instead of `gross_value`). */
+export interface Expense {
+    url: string;
+    user: string;
+    category?: string;
+    dated_on: string;
+    currency?: string;
+    gross_value?: string;
+    native_gross_value?: string;
+    description?: string;
+    receipt_reference?: string;
+    sales_tax_rate?: string;
+    sales_tax_value?: string;
+    sales_tax_status?: string;
+    native_sales_tax_value?: string;
+    second_sales_tax_rate?: string;
+    second_sales_tax_status?: string;
+    manual_sales_tax_amount?: string;
+    ec_status?: string;
+    project?: string;
+    rebill_type?: string;
+    rebill_factor?: string;
+    rebill_to_project?: string;
+    /** Read-only: set by FreeAgent once the expense has been rebilled. */
+    rebilled_on_invoice?: string;
+    recurring?: string;
+    next_recurs_on?: string;
+    recurring_end_date?: string;
+    mileage?: string;
+    vehicle_type?: string;
+    engine_type?: string;
+    engine_size?: string;
+    reclaim_mileage?: number;
+    initial_rate_mileage?: string;
+    reclaim_mileage_rate?: string;
+    rebill_mileage_rate?: string;
+    have_vat_receipt?: boolean;
+    /** Read-only: link to the capital asset auto-created from the expense. */
+    capital_asset?: string;
+    stock_item?: string;
+    stock_item_description?: string;
+    stock_altering_quantity?: string;
+    property?: string;
+    attachment?: ExpenseAttachment;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ExpensesResponse {
+    expenses: Expense[];
+}
+
+export interface ExpenseResponse {
+    expense: Expense;
+}
+
+/** Attachment payload for create/update — base64-encoded bytes. */
+export interface ExpenseAttachmentPayload {
+    data: string;
+    file_name: string;
+    content_type: string;
+    description?: string;
+}
+
+/** FreeAgent wire shape for POST/PUT /expenses (the value of the `expense`
+ *  wrapper key). Built from curated tool input by buildExpensePayload in
+ *  expenses.ts. Fields beyond the Phase 1 core (mileage, rebill, recurring,
+ *  FX) are declared here so the one payload type describes the whole
+ *  resource; individual tools gate which fields they actually set. */
+export interface ExpenseCreatePayload {
+    user: string;
+    dated_on: string;
+    category?: string;
+    gross_value?: string;
+    currency?: string;
+    native_gross_value?: string;
+    description?: string;
+    receipt_reference?: string;
+    sales_tax_rate?: string;
+    sales_tax_value?: string;
+    sales_tax_status?: string;
+    manual_sales_tax_amount?: string;
+    ec_status?: string;
+    project?: string;
+    rebill_type?: string;
+    rebill_factor?: string;
+    recurring?: string;
+    recurring_end_date?: string;
+    property?: string;
+    mileage?: string;
+    vehicle_type?: string;
+    engine_type?: string;
+    engine_size?: string;
+    reclaim_mileage?: number;
+    have_vat_receipt?: boolean;
+    attachment?: ExpenseAttachmentPayload;
+}
+
+/** One dated period of GET /expenses/mileage_settings — the valid engine
+ *  types and their sizes change over time, so options are date-scoped. */
+export interface MileageEngineOptionPeriod {
+    from?: string;
+    to?: string | null;
+    /** Engine type (e.g. "Petrol") → list of valid engine sizes. */
+    value?: Record<string, string[]>;
+}
+
+export interface MileageRatePeriod {
+    from?: string;
+    to?: string | null;
+    value?: Record<string, unknown>;
+}
+
+export interface MileageSettings {
+    engine_type_and_size_options?: MileageEngineOptionPeriod[];
+    mileage_rates?: MileageRatePeriod[];
+}
+
+export interface MileageSettingsResponse {
+    mileage_settings: MileageSettings;
 }
