@@ -6,106 +6,30 @@
 // sizes change over time (HMRC revisions), so they are validated against
 // GET /expenses/mileage_settings for the claim date.
 //
+// Tool input shape is validated by the Zod schema in tool-schemas.ts;
+// this module holds the date-scoped engine resolution and payload build.
 // Defensive by design: if the mileage_settings response can't be parsed
-// into a date-scoped engine map, validation degrades to passing the
-// caller's engine_type/engine_size through and letting FreeAgent be the
-// authority — a docs-shape guess should never block a legitimate claim.
+// into a date-scoped engine map, engine resolution degrades to passing
+// the caller's values through — a docs-shape guess should never block a
+// legitimate claim.
 
+import { z } from 'zod';
 import type { ExpenseCreatePayload, ExpenseAttachmentPayload, MileageSettings } from './types.js';
-import type { ExpenseAttachmentInput } from './expenses.js';
+import { toolSchemas } from './tool-schemas.js';
 
-export const VEHICLE_TYPES = ['Car', 'Motorcycle', 'Bicycle'] as const;
-export type VehicleType = (typeof VEHICLE_TYPES)[number];
+export type VehicleType = 'Car' | 'Motorcycle' | 'Bicycle';
 
-/** Vehicle types that carry an engine_type/engine_size. */
-function hasEngine(v: VehicleType): boolean {
-    return v === 'Car' || v === 'Motorcycle';
-}
-
-export interface CreateMileageExpenseInput {
-    user?: string;
-    dated_on: string;
-    mileage: string;            // positive magnitude
-    vehicle_type: VehicleType;
-    engine_type?: string;
-    engine_size?: string;
-    reclaim_mileage: boolean;   // true ⇒ claim at the AMAP rate (the default)
-    description?: string;
-    receipt_reference?: string;
-    have_vat_receipt?: boolean;
-    attachment?: ExpenseAttachmentInput;
-}
+/** Validated create_mileage_expense input (the Zod-inferred shape). */
+export type CreateMileageExpenseInput = z.infer<typeof toolSchemas.create_mileage_expense>;
 
 export interface ResolvedEngine {
     engine_type?: string;
     engine_size?: string;
 }
 
-function normalisePositiveAmount(value: unknown, label: string): string {
-    let n: number;
-    if (typeof value === 'number') n = value;
-    else if (typeof value === 'string' && value.trim() !== '') n = Number(value);
-    else throw new Error(`${label} is required and must be a positive number`);
-    if (!Number.isFinite(n)) throw new Error(`${label} must be a finite number, got ${JSON.stringify(value)}`);
-    if (n <= 0) throw new Error(`${label} must be a positive number of miles`);
-    return String(value).trim();
-}
-
-function validateVehicleType(value: unknown): VehicleType {
-    if (typeof value === 'string') {
-        const match = VEHICLE_TYPES.find(v => v.toLowerCase() === value.trim().toLowerCase());
-        if (match) return match;
-    }
-    throw new Error(`vehicle_type is required and must be one of ${VEHICLE_TYPES.join(', ')}`);
-}
-
-function validateAttachmentInput(value: unknown): ExpenseAttachmentInput {
-    if (typeof value !== 'object' || value == null) throw new Error('attachment must be an object');
-    const a = value as Record<string, unknown>;
-    if (typeof a.evidence_path !== 'string' || a.evidence_path.trim() === '') {
-        throw new Error('attachment.evidence_path is required (a path inside the staging directory from get_staging_directory)');
-    }
-    if (typeof a.file_name !== 'string' || a.file_name.trim() === '') {
-        throw new Error('attachment.file_name is required');
-    }
-    if (typeof a.content_type !== 'string' || a.content_type.trim() === '') {
-        throw new Error('attachment.content_type is required');
-    }
-    const out: ExpenseAttachmentInput = {
-        evidence_path: a.evidence_path,
-        file_name: a.file_name,
-        content_type: a.content_type,
-    };
-    if (typeof a.description === 'string') out.description = a.description;
-    return out;
-}
-
-export function validateCreateMileageExpenseInput(data: unknown): CreateMileageExpenseInput {
-    if (typeof data !== 'object' || data == null) {
-        throw new Error('Invalid mileage expense data: must be an object');
-    }
-    const a = data as Record<string, unknown>;
-
-    if (typeof a.dated_on !== 'string' || a.dated_on.trim() === '') {
-        throw new Error('dated_on is required (YYYY-MM-DD)');
-    }
-    const vehicle_type = validateVehicleType(a.vehicle_type);
-
-    const input: CreateMileageExpenseInput = {
-        dated_on: a.dated_on.trim(),
-        mileage: normalisePositiveAmount(a.mileage, 'mileage'),
-        vehicle_type,
-        // Default: reclaim at the AMAP rate unless explicitly disabled.
-        reclaim_mileage: a.reclaim_mileage !== false,
-    };
-    if (typeof a.user === 'string' && a.user.trim() !== '') input.user = a.user.trim();
-    if (typeof a.engine_type === 'string' && a.engine_type.trim() !== '') input.engine_type = a.engine_type.trim();
-    if (typeof a.engine_size === 'string' && a.engine_size.trim() !== '') input.engine_size = a.engine_size.trim();
-    if (typeof a.description === 'string') input.description = a.description;
-    if (typeof a.receipt_reference === 'string') input.receipt_reference = a.receipt_reference;
-    if (typeof a.have_vat_receipt === 'boolean') input.have_vat_receipt = a.have_vat_receipt;
-    if (a.attachment !== undefined) input.attachment = validateAttachmentInput(a.attachment);
-    return input;
+/** Vehicle types that carry an engine_type/engine_size. */
+function hasEngine(v: VehicleType): boolean {
+    return v === 'Car' || v === 'Motorcycle';
 }
 
 function dateInPeriod(dated_on: string, from?: string, to?: string | null): boolean {
@@ -195,9 +119,10 @@ export function buildMileagePayload(
         user: refs.user,
         dated_on: input.dated_on,
         category: 'Mileage',
-        mileage: input.mileage,
+        mileage: String(input.mileage),
         vehicle_type: input.vehicle_type,
-        reclaim_mileage: input.reclaim_mileage ? 1 : 0,
+        // Default: reclaim at the AMAP rate unless explicitly disabled.
+        reclaim_mileage: input.reclaim_mileage === false ? 0 : 1,
     };
     if (refs.engine.engine_type) payload.engine_type = refs.engine.engine_type;
     if (refs.engine.engine_size) payload.engine_size = refs.engine.engine_size;

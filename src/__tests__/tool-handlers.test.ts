@@ -70,11 +70,11 @@ describe('create_project', () => {
     expect(parseResult(result)).toEqual(project);
   });
 
-  it('returns error for invalid attributes', async () => {
+  it('rejects invalid attributes via schema validation', async () => {
     const result = await callTool('create_project', { name: 'Test' });
 
     expect(result.isError).toBe(true);
-    expect((result.content as any)[0].text).toContain('required');
+    expect((result.content as any)[0].text).toMatch(/validation/i);
   });
 });
 
@@ -95,18 +95,18 @@ describe('create_task', () => {
     expect(parseResult(result)).toEqual(task);
   });
 
-  it('returns error when project is missing', async () => {
+  it('rejects a call missing project', async () => {
     const result = await callTool('create_task', { name: 'Task' });
 
     expect(result.isError).toBe(true);
-    expect((result.content as any)[0].text).toContain('project is required');
+    expect((result.content as any)[0].text).toMatch(/validation/i);
   });
 
-  it('returns error when name is missing', async () => {
+  it('rejects a call missing name', async () => {
     const result = await callTool('create_task', { project: 'url' });
 
     expect(result.isError).toBe(true);
-    expect((result.content as any)[0].text).toContain('name is required');
+    expect((result.content as any)[0].text).toMatch(/validation/i);
   });
 });
 
@@ -166,11 +166,11 @@ describe('get_timeslip', () => {
     expect(parseResult(result)).toEqual(timeslip);
   });
 
-  it('returns error for invalid ID', async () => {
+  it('rejects a non-numeric ID via schema validation', async () => {
     const result = await callTool('get_timeslip', { id: 'abc' });
 
     expect(result.isError).toBe(true);
-    expect((result.content as any)[0].text).toContain('Invalid ID');
+    expect((result.content as any)[0].text).toMatch(/validation/i);
   });
 });
 
@@ -281,23 +281,31 @@ describe('create_timeslip', () => {
     expect(parseResult(result)).toEqual(timeslip);
   });
 
-  it('returns error for invalid attributes', async () => {
+  it('rejects invalid attributes via schema validation', async () => {
     const result = await callTool('create_timeslip', { task: 'url' });
 
     expect(result.isError).toBe(true);
-    expect((result.content as any)[0].text).toContain('missing required fields');
+    expect((result.content as any)[0].text).toMatch(/validation/i);
   });
 });
 
 // update_timeslip
 describe('update_timeslip', () => {
-  it('filters to only valid update fields', async () => {
+  it('updates the supplied fields', async () => {
     const timeslip = { url: 'https://api.freeagent.com/v2/timeslips/42' };
     vi.mocked(mockFaClient.updateTimeslip).mockResolvedValue(timeslip as any);
 
-    await callTool('update_timeslip', { id: '42', hours: '8', unknown_field: 'ignored' });
+    await callTool('update_timeslip', { id: '42', hours: '8' });
 
     expect(mockFaClient.updateTimeslip).toHaveBeenCalledWith('42', { hours: '8' });
+  });
+
+  it('rejects an unrecognised update field (strict schema)', async () => {
+    const result = await callTool('update_timeslip', { id: '42', hours: '8', unknown_field: 'x' });
+
+    expect(result.isError).toBe(true);
+    expect((result.content as any)[0].text).toMatch(/validation/i);
+    expect(mockFaClient.updateTimeslip).not.toHaveBeenCalled();
   });
 
   it('validates ID', async () => {
@@ -350,20 +358,20 @@ describe('create_timeslips', () => {
     expect(text).toContain('Skipped 1 duplicate');
   });
 
-  it('rejects empty array', async () => {
+  it('rejects an empty array via schema validation', async () => {
     const result = await callTool('create_timeslips', { timeslips: [] });
 
     expect(result.isError).toBe(true);
-    expect((result.content as any)[0].text).toContain('non-empty array');
+    expect((result.content as any)[0].text).toMatch(/validation/i);
   });
 
-  it('wraps per-item validation errors with index', async () => {
+  it('rejects a batch containing an invalid item', async () => {
     const result = await callTool('create_timeslips', {
       timeslips: [validTimeslip, { task: 'url' }],
     });
 
     expect(result.isError).toBe(true);
-    expect((result.content as any)[0].text).toContain('index 1');
+    expect((result.content as any)[0].text).toMatch(/validation/i);
   });
 });
 
@@ -588,13 +596,21 @@ describe('create_invoice', () => {
 
 // update_invoice
 describe('update_invoice', () => {
-  it('validates ID and filters valid update fields', async () => {
+  it('updates the supplied fields', async () => {
     const invoice = { url: 'https://api.freeagent.com/v2/invoices/42' };
     vi.mocked(mockFaClient.updateInvoice).mockResolvedValue(invoice as any);
 
-    await callTool('update_invoice', { id: '42', comments: 'Updated', unknown: 'ignored' });
+    await callTool('update_invoice', { id: '42', comments: 'Updated' });
 
     expect(mockFaClient.updateInvoice).toHaveBeenCalledWith('42', { comments: 'Updated' });
+  });
+
+  it('rejects an unrecognised update field (strict schema)', async () => {
+    const result = await callTool('update_invoice', { id: '42', comments: 'Updated', unknown: 'x' });
+
+    expect(result.isError).toBe(true);
+    expect((result.content as any)[0].text).toMatch(/validation/i);
+    expect(mockFaClient.updateInvoice).not.toHaveBeenCalled();
   });
 
   it('validates invoice_items array when present', async () => {
@@ -763,6 +779,6 @@ describe('error handling', () => {
   it('unknown tool name returns isError response', async () => {
     const result = await callTool('nonexistent_tool');
     expect(result.isError).toBe(true);
-    expect((result.content as any)[0].text).toContain('Unknown tool');
+    expect((result.content as any)[0].text).toContain('nonexistent_tool');
   });
 });

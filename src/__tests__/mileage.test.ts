@@ -1,12 +1,13 @@
-// Unit tests for mileage-claim handling: input validation, date-scoped
-// engine resolution, and wire-payload building.
+// Unit tests for mileage-claim handling: date-scoped engine resolution
+// and wire-payload building. Input-shape validation is now the Zod
+// schema's job — exercised via the MCP-transport tests in mileage-mcp.
 
 import { describe, it, expect } from 'vitest';
 import {
-  validateCreateMileageExpenseInput,
   findEngineOptionsForDate,
   resolveEngine,
   buildMileagePayload,
+  type CreateMileageExpenseInput,
 } from '../mileage.js';
 import type { MileageSettings } from '../types.js';
 
@@ -82,40 +83,9 @@ describe('resolveEngine', () => {
   });
 });
 
-describe('validateCreateMileageExpenseInput', () => {
-  it('accepts a valid claim and defaults reclaim_mileage to true', () => {
-    const input = validateCreateMileageExpenseInput({ dated_on: '2026-05-01', mileage: 47, vehicle_type: 'Car' });
-    expect(input).toMatchObject({ dated_on: '2026-05-01', mileage: '47', vehicle_type: 'Car', reclaim_mileage: true });
-  });
-
-  it('honours reclaim_mileage: false', () => {
-    expect(validateCreateMileageExpenseInput({ dated_on: '2026-05-01', mileage: 5, vehicle_type: 'Car', reclaim_mileage: false }).reclaim_mileage)
-      .toBe(false);
-  });
-
-  it('normalises the vehicle type case', () => {
-    expect(validateCreateMileageExpenseInput({ dated_on: '2026-05-01', mileage: 5, vehicle_type: 'bicycle' }).vehicle_type)
-      .toBe('Bicycle');
-  });
-
-  it('rejects an unknown vehicle type', () => {
-    expect(() => validateCreateMileageExpenseInput({ dated_on: '2026-05-01', mileage: 5, vehicle_type: 'Spaceship' }))
-      .toThrow(/vehicle_type/);
-  });
-
-  it('rejects a missing dated_on', () => {
-    expect(() => validateCreateMileageExpenseInput({ mileage: 5, vehicle_type: 'Car' })).toThrow(/dated_on is required/);
-  });
-
-  it('rejects a non-positive mileage', () => {
-    expect(() => validateCreateMileageExpenseInput({ dated_on: '2026-05-01', mileage: 0, vehicle_type: 'Car' }))
-      .toThrow(/positive number of miles/);
-  });
-});
-
 describe('buildMileagePayload', () => {
   it('builds the Mileage wire payload with no gross_value', () => {
-    const input = validateCreateMileageExpenseInput({ dated_on: '2026-05-01', mileage: 47, vehicle_type: 'Car' });
+    const input: CreateMileageExpenseInput = { dated_on: '2026-05-01', mileage: 47, vehicle_type: 'Car' };
     const payload = buildMileagePayload(input, {
       user: 'https://api.freeagent.com/v2/users/1',
       engine: { engine_type: 'Petrol', engine_size: 'Up to 1400cc' },
@@ -133,8 +103,13 @@ describe('buildMileagePayload', () => {
     expect(payload.gross_value).toBeUndefined();
   });
 
+  it('defaults reclaim_mileage to 1 (AMAP) when omitted', () => {
+    const input: CreateMileageExpenseInput = { dated_on: '2026-05-01', mileage: 12, vehicle_type: 'Bicycle' };
+    expect(buildMileagePayload(input, { user: 'u/1', engine: {} }).reclaim_mileage).toBe(1);
+  });
+
   it('maps reclaim_mileage: false to 0 and omits engine fields for a bicycle', () => {
-    const input = validateCreateMileageExpenseInput({ dated_on: '2026-05-01', mileage: 10, vehicle_type: 'Bicycle', reclaim_mileage: false });
+    const input: CreateMileageExpenseInput = { dated_on: '2026-05-01', mileage: 10, vehicle_type: 'Bicycle', reclaim_mileage: false };
     const payload = buildMileagePayload(input, { user: 'u/1', engine: {} });
     expect(payload.reclaim_mileage).toBe(0);
     expect(payload.engine_type).toBeUndefined();

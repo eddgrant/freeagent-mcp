@@ -1,137 +1,13 @@
-import { TimeslipAttributes, InvoiceAttributes, ProjectAttributes, TaskAttributes } from './types.js';
+// Invoice tool-input → FreeAgent wire-payload translation.
+//
+// The create_invoice / update_invoice tools expose `project_ids` plus a
+// `numbering_source`; FreeAgent's API wants `project` (a URL) paired with
+// `project_ids` (numeric IDs). These helpers normalise the tool input and
+// build the wire payload. Input *shape* is validated upstream by the Zod
+// schemas — what remains here is genuine transformation (URL → ID
+// extraction) and the cross-field numbering_source/project_ids check.
 
-export function validateTimeslipAttributes(data: unknown): TimeslipAttributes {
-  if (typeof data !== 'object' || !data) {
-    throw new Error('Invalid timeslip data: must be an object');
-  }
-
-  const attrs = data as Record<string, unknown>;
-
-  if (typeof attrs.task !== 'string' ||
-    typeof attrs.user !== 'string' ||
-    typeof attrs.project !== 'string' ||
-    typeof attrs.dated_on !== 'string' ||
-    typeof attrs.hours !== 'string') {
-    throw new Error('Invalid timeslip data: missing required fields');
-  }
-
-  return {
-    task: attrs.task,
-    user: attrs.user,
-    project: attrs.project,
-    dated_on: attrs.dated_on,
-    hours: attrs.hours,
-    comment: attrs.comment as string | undefined
-  };
-}
-
-// Prevent path traversal via ID parameters interpolated into API URLs.
-export function validateId(id: unknown): string {
-  if (typeof id !== 'string' || !/^\d+$/.test(id)) {
-    throw new Error('Invalid ID: must be a numeric string');
-  }
-  return id;
-}
-
-export function validateProjectAttributes(data: unknown): ProjectAttributes {
-  if (typeof data !== 'object' || !data) {
-    throw new Error('Invalid project data: must be an object');
-  }
-
-  const attrs = data as Record<string, unknown>;
-
-  if (typeof attrs.contact !== 'string' ||
-    typeof attrs.name !== 'string' ||
-    typeof attrs.status !== 'string' ||
-    typeof attrs.budget_units !== 'string' ||
-    typeof attrs.currency !== 'string') {
-    throw new Error('Invalid project data: contact, name, status, budget_units, and currency are required strings');
-  }
-
-  if (typeof attrs.budget !== 'number') {
-    throw new Error('Invalid project data: budget is required and must be a number');
-  }
-
-  if (typeof attrs.uses_project_invoice_sequence !== 'boolean') {
-    throw new Error('Invalid project data: uses_project_invoice_sequence is required and must be a boolean');
-  }
-
-  const project: ProjectAttributes = {
-    contact: attrs.contact,
-    name: attrs.name,
-    status: attrs.status,
-    budget: attrs.budget,
-    budget_units: attrs.budget_units,
-    currency: attrs.currency,
-    uses_project_invoice_sequence: attrs.uses_project_invoice_sequence,
-  };
-
-  if (typeof attrs.contract_po_reference === 'string') project.contract_po_reference = attrs.contract_po_reference;
-  if (typeof attrs.hours_per_day === 'number') project.hours_per_day = attrs.hours_per_day;
-  if (typeof attrs.normal_billing_rate === 'string') project.normal_billing_rate = attrs.normal_billing_rate;
-  if (typeof attrs.billing_period === 'string') project.billing_period = attrs.billing_period;
-  if (typeof attrs.is_ir35 === 'boolean') project.is_ir35 = attrs.is_ir35;
-  if (typeof attrs.starts_on === 'string') project.starts_on = attrs.starts_on;
-  if (typeof attrs.ends_on === 'string') project.ends_on = attrs.ends_on;
-  if (typeof attrs.include_unbilled_time_in_profitability === 'boolean') project.include_unbilled_time_in_profitability = attrs.include_unbilled_time_in_profitability;
-
-  return project;
-}
-
-export function validateTaskAttributes(data: unknown): { project: string; task: TaskAttributes } {
-  if (typeof data !== 'object' || !data) {
-    throw new Error('Invalid task data: must be an object');
-  }
-
-  const attrs = data as Record<string, unknown>;
-
-  if (typeof attrs.project !== 'string') {
-    throw new Error('Invalid task data: project is required');
-  }
-
-  if (typeof attrs.name !== 'string') {
-    throw new Error('Invalid task data: name is required');
-  }
-
-  const task: TaskAttributes = {
-    name: attrs.name,
-  };
-
-  if (typeof attrs.is_billable === 'boolean') task.is_billable = attrs.is_billable;
-  if (typeof attrs.status === 'string') task.status = attrs.status;
-  if (typeof attrs.billing_rate === 'string') task.billing_rate = attrs.billing_rate;
-  if (typeof attrs.billing_period === 'string') task.billing_period = attrs.billing_period;
-
-  return { project: attrs.project, task };
-}
-
-export function validateInvoiceItemAttributes(item: unknown, index: number): InvoiceAttributes['invoice_items'] extends (infer T)[] | undefined ? T : never {
-  if (typeof item !== 'object' || !item) {
-    throw new Error(`Invoice item at index ${index}: must be an object`);
-  }
-  const attrs = item as Record<string, unknown>;
-
-  if (typeof attrs.item_type !== 'string' ||
-    typeof attrs.description !== 'string' ||
-    typeof attrs.quantity !== 'string' ||
-    typeof attrs.price !== 'string') {
-    throw new Error(`Invoice item at index ${index}: item_type, description, quantity, and price are required strings`);
-  }
-
-  const validated: Record<string, unknown> = {
-    item_type: attrs.item_type,
-    description: attrs.description,
-    quantity: attrs.quantity,
-    price: attrs.price,
-  };
-
-  if (typeof attrs.id === 'string') validated.id = attrs.id;
-  if (typeof attrs.sales_tax_rate === 'string') validated.sales_tax_rate = attrs.sales_tax_rate;
-  if (typeof attrs.position === 'number') validated.position = attrs.position;
-  if (attrs._destroy === 1) validated._destroy = 1;
-
-  return validated as any;
-}
+import { InvoiceAttributes } from './types.js';
 
 // Validated MCP-tool input shape for invoice creation. Distinct from the
 // FreeAgent wire shape (InvoiceAttributes) because we expose `project_ids`
@@ -152,54 +28,13 @@ export interface InvoiceToolInput {
 
 export const ORG_WIDE_NUMBERING = 'org-wide';
 
-export function validateInvoiceAttributes(data: unknown): InvoiceToolInput {
-  if (typeof data !== 'object' || !data) {
-    throw new Error('Invalid invoice data: must be an object');
-  }
-
-  const attrs = data as Record<string, unknown>;
-
-  if (typeof attrs.contact !== 'string' || typeof attrs.dated_on !== 'string') {
-    throw new Error('Invalid invoice data: contact and dated_on are required');
-  }
-
-  const invoice: InvoiceToolInput = {
-    contact: attrs.contact,
-    dated_on: attrs.dated_on,
-    payment_terms_in_days: typeof attrs.payment_terms_in_days === 'number' ? attrs.payment_terms_in_days : 30,
-  };
-
-  if (typeof attrs.currency === 'string') invoice.currency = attrs.currency;
-  if (typeof attrs.comments === 'string') invoice.comments = attrs.comments;
-  if (typeof attrs.ec_status === 'string') invoice.ec_status = attrs.ec_status;
-  if (typeof attrs.include_timeslips === 'string') invoice.include_timeslips = attrs.include_timeslips;
-  if (Array.isArray(attrs.invoice_items)) {
-    invoice.invoice_items = attrs.invoice_items.map((item, i) => validateInvoiceItemAttributes(item, i));
-  }
-  if (attrs.project_ids !== undefined) {
-    invoice.project_ids = normaliseProjectIds(attrs.project_ids);
-  }
-  if (attrs.numbering_source !== undefined) {
-    invoice.numbering_source = normaliseNumberingSource(attrs.numbering_source, invoice.project_ids);
-  }
-
-  return invoice;
-}
-
 // Accepts each entry as a numeric ID string or a /projects/<id> URL,
 // normalises to numeric IDs, deduplicates while preserving first-seen order.
-export function normaliseProjectIds(input: unknown): string[] {
-  if (!Array.isArray(input)) {
-    throw new Error('Invalid invoice data: project_ids must be an array of project IDs');
-  }
+export function normaliseProjectIds(input: string[]): string[] {
   const ids: string[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < input.length; i++) {
-    const raw = input[i];
-    if (typeof raw !== 'string') {
-      throw new Error(`Invalid invoice data: project_ids[${i}] must be a string`);
-    }
-    const id = extractProjectId(raw, `project_ids[${i}]`);
+    const id = extractProjectId(input[i], `project_ids[${i}]`);
     if (!seen.has(id)) {
       seen.add(id);
       ids.push(id);
@@ -208,10 +43,7 @@ export function normaliseProjectIds(input: unknown): string[] {
   return ids;
 }
 
-export function normaliseNumberingSource(value: unknown, projectIds: string[] | undefined): string {
-  if (typeof value !== 'string') {
-    throw new Error('Invalid invoice data: numbering_source must be a string (a project ID, a project URL, or "org-wide")');
-  }
+export function normaliseNumberingSource(value: string, projectIds: string[] | undefined): string {
   if (value === ORG_WIDE_NUMBERING) return value;
   const id = extractProjectId(value, 'numbering_source');
   if (projectIds && projectIds.length > 0 && !projectIds.includes(id)) {

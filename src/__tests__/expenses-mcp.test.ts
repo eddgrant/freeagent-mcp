@@ -127,13 +127,14 @@ describe('expense CRUD tools (via MCP)', () => {
       expect(mock.createExpense as any).not.toHaveBeenCalled();
     });
 
-    it('returns an error for a negative gross_value', async () => {
+    it('rejects a negative gross_value (schema requires a positive number)', async () => {
       const result = await client.callTool({
         name: 'create_expense',
         arguments: { category: 'Travel', dated_on: '2026-05-01', gross_value: -5 },
       });
       expect((result as { isError?: boolean }).isError).toBe(true);
-      expect(parseResult(result)).toMatch(/refund_due/);
+      expect(parseResult(result)).toMatch(/validation/i);
+      expect(mock.createExpense as any).not.toHaveBeenCalled();
     });
   });
 
@@ -229,7 +230,7 @@ describe('expense CRUD tools (via MCP)', () => {
       expect(mock.createExpenses as any).not.toHaveBeenCalled();
     });
 
-    it('reports which item failed validation and posts nothing', async () => {
+    it('rejects a batch with an invalid item and posts nothing', async () => {
       const result = await client.callTool({
         name: 'create_expenses',
         arguments: {
@@ -240,7 +241,7 @@ describe('expense CRUD tools (via MCP)', () => {
         },
       });
       expect((result as { isError?: boolean }).isError).toBe(true);
-      expect(parseResult(result)).toMatch(/expenses\[1\]/);
+      expect(parseResult(result)).toMatch(/validation/i);
       expect(mock.createExpenses as any).not.toHaveBeenCalled();
     });
   });
