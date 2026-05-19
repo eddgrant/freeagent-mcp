@@ -20,7 +20,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "axios": "^1.8.1"
+    "axios": "^1.8.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20.11.24",
