@@ -636,12 +636,30 @@ export class FreeAgentServer {
           }
         },
         {
+          name: 'get_staging_directory',
+          description:
+            'Return the session staging directory — a folder on a shared filesystem that both ' +
+            'you and this server can read. To attach a receipt to an expense, copy the file into ' +
+            'this directory yourself (e.g. with `cp`) and pass the resulting path as ' +
+            'attachment.evidence_path to create_expense / update_expense / create_mileage_expense. ' +
+            'This is the fast, lossless route — copy the original at full quality, no base64 and ' +
+            'no downscaling to save tokens. (FreeAgent still rejects attachments over 5 MB, so ' +
+            'reduce a file only if it genuinely exceeds that.) Returns { ready: false, path: null } ' +
+            'when the shared volume is not mounted; in that case fall back to stage_evidence.',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {}
+          }
+        },
+        {
           name: 'stage_evidence',
           description:
-            'Stage a single evidence file in the session staging directory for later attachment ' +
-            'to an expense. Accepts base64 bytes (≤5 MB) and returns the on-disk path to pass into ' +
-            'create_expense, update_expense or create_mileage_expense. Use once per attachment ' +
-            'immediately before that call — bytes pass through model context only during this call. ' +
+            'FALLBACK for attaching a receipt when you cannot write to the staging directory ' +
+            'yourself. Accepts base64-encoded bytes inline (≤5 MB), writes them to the session ' +
+            'staging directory, and returns the on-disk path to pass as attachment.evidence_path. ' +
+            'PREFER copying the file directly: call get_staging_directory, copy your file into ' +
+            'that directory, and pass the path — that is faster and lossless, whereas passing ' +
+            'bytes here forces large images to be downscaled to fit model context. ' +
             'Requires the shared evidence volume to be mounted; returns ' +
             '{ ok: false, error: { code: "staging_volume_not_mounted" } } if not. ' +
             'Returns a structured { ok: true | false, ... } result; never throws for business-logic errors.',
@@ -726,9 +744,9 @@ export class FreeAgentServer {
               property: { type: 'string', description: 'Property URL — required for UkUnincorporatedLandlord companies, ignored otherwise.' },
               attachment: {
                 type: 'object',
-                description: 'Optional receipt. Stage the file first with stage_evidence, then pass the returned path here.',
+                description: 'Optional receipt. Preferred: call get_staging_directory, copy the file into that directory, and pass its path as evidence_path. Or use stage_evidence to upload base64 bytes.',
                 properties: {
-                  evidence_path: { type: 'string', description: 'Path returned by stage_evidence' },
+                  evidence_path: { type: 'string', description: 'Absolute path to the receipt file inside the session staging directory — from get_staging_directory (copy the file there yourself) or returned by stage_evidence.' },
                   file_name: { type: 'string', description: 'File name for the attachment' },
                   content_type: { type: 'string', description: 'MIME type, e.g. image/jpeg, image/png, application/pdf' },
                   description: { type: 'string', description: 'Optional attachment description' }
@@ -774,9 +792,9 @@ export class FreeAgentServer {
               property: { type: 'string', description: 'Property URL (UkUnincorporatedLandlord companies)' },
               attachment: {
                 type: 'object',
-                description: 'Replacement receipt. Stage the file first with stage_evidence, then pass the returned path here.',
+                description: 'Replacement receipt. Preferred: call get_staging_directory, copy the file into that directory, and pass its path as evidence_path. Or use stage_evidence to upload base64 bytes.',
                 properties: {
-                  evidence_path: { type: 'string', description: 'Path returned by stage_evidence' },
+                  evidence_path: { type: 'string', description: 'Absolute path to the receipt file inside the session staging directory — from get_staging_directory (copy the file there yourself) or returned by stage_evidence.' },
                   file_name: { type: 'string', description: 'File name for the attachment' },
                   content_type: { type: 'string', description: 'MIME type, e.g. image/jpeg, image/png, application/pdf' },
                   description: { type: 'string', description: 'Optional attachment description' }
@@ -832,9 +850,9 @@ export class FreeAgentServer {
               have_vat_receipt: { type: 'boolean', description: 'Whether a VAT receipt is held for the fuel' },
               attachment: {
                 type: 'object',
-                description: 'Optional supporting document. Stage the file first with stage_evidence, then pass the returned path here.',
+                description: 'Optional supporting document. Preferred: call get_staging_directory, copy the file into that directory, and pass its path as evidence_path. Or use stage_evidence to upload base64 bytes.',
                 properties: {
-                  evidence_path: { type: 'string', description: 'Path returned by stage_evidence' },
+                  evidence_path: { type: 'string', description: 'Absolute path to the receipt file inside the session staging directory — from get_staging_directory (copy the file there yourself) or returned by stage_evidence.' },
                   file_name: { type: 'string', description: 'File name for the attachment' },
                   content_type: { type: 'string', description: 'MIME type, e.g. image/jpeg, image/png, application/pdf' },
                   description: { type: 'string', description: 'Optional attachment description' }
@@ -1266,6 +1284,15 @@ export class FreeAgentServer {
             return {
               content: [{ type: 'text' as const, text: JSON.stringify(summary, null, 2) }]
             };
+          }
+
+          case 'get_staging_directory': {
+            const body = {
+              ready: this.stagingState.ready,
+              path: this.stagingState.sessionPath,
+              ...(this.stagingState.reason ? { reason: this.stagingState.reason } : {}),
+            };
+            return { content: [{ type: 'text' as const, text: JSON.stringify(body, null, 2) }] };
           }
 
           case 'stage_evidence': {

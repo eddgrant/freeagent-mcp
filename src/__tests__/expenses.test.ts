@@ -176,6 +176,24 @@ describe('readStagedAttachment', () => {
       dir,
     )).toThrow(/attachment validation failed/);
   });
+
+  it('throws when the file bytes do not match the declared content_type', () => {
+    // The file is a PDF; declaring it a PNG must be rejected by the
+    // magic-byte check (the direct-copy route has no other content check).
+    expect(() => readStagedAttachment(
+      { evidence_path: file, file_name: 'receipt.png', content_type: 'image/png' },
+      dir,
+    )).toThrow(/content-type mismatch/);
+  });
+
+  it('throws when the file is not a recognised type', () => {
+    const txt = path.join(dir, 'notes.pdf');
+    fs.writeFileSync(txt, Buffer.from('just some plain text', 'utf8'));
+    expect(() => readStagedAttachment(
+      { evidence_path: txt, file_name: 'notes.pdf', content_type: 'application/pdf' },
+      dir,
+    )).toThrow(/unrecognised type/);
+  });
 });
 
 describe('advanced expense modes (Phase 3)', () => {

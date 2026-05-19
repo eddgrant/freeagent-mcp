@@ -27,10 +27,14 @@ const STAGING_NOT_READY: StagingState = {
 };
 
 describe('buildLogExpensesPromptBody', () => {
-    it('embeds the live session path and the attachment-supporting step when staging is ready', () => {
+    it('embeds the live session path and the direct-copy attachment step when staging is ready', () => {
         const body = buildLogExpensesPromptBody(STAGING_READY);
         expect(body).toContain('/tmp/freeagent-mcp/abc123');
-        expect(body).toMatch(/STAGE RECEIPT ATTACHMENTS\n {3}For each receipt/);
+        expect(body).toMatch(/STAGE RECEIPT ATTACHMENTS/);
+        // Direct copy is promoted over base64; downscaling only past 5 MB.
+        expect(body).toMatch(/copy the file into that directory/);
+        expect(body).toMatch(/5 MB/);
+        expect(body).toMatch(/fall back to stage_evidence/i);
     });
 
     it('emits a clear unavailable note when staging is not ready', () => {
